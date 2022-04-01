@@ -4,12 +4,14 @@ from pyccs import Server
 
 server = None
 
+OPCODES = {'+': 1, '-': 2, '*': 3, '/': 4, '@': 5}
+
 def create_ndarray(name, ndim, shape, dtype):
     return ndarray(ndim, shape, dtype, name)
 
 def send_command(handler, msg, reply_size=8):
     server.send_request(handler, 0, msg)
-    return int.from_bytes(server.receive_response(reply_size), "little")
+    return int.from_bytes(server.receive_response(reply_size), 'little')
 
 def connect(server_ip, server_port):
     global server
@@ -34,6 +36,7 @@ class ndarray:
         self._creation_handler = b'aum_creation'
         self._operation_handler = b'aum_operation'
         self._fetch_handler = b'aum_fetch'
+        self._delete_handler = b'aum_delete'
         self._exit_handler = b'aum_exit'
         if name:
             self.name = name
@@ -45,9 +48,9 @@ class ndarray:
         """
         Generate array creation CCS command
         """
-        cmd = int(self.ndim).to_bytes(4, "little")
+        cmd = int(self.ndim).to_bytes(4, 'little')
         for s in self.shape:
-            cmd += int(s).to_bytes(8, "little")
+            cmd += int(s).to_bytes(8, 'little')
         return cmd
 
     def _get_fetch_command(self):
@@ -60,10 +63,18 @@ class ndarray:
         """
         Generate CCS command for operation
         """
-        pass
+        if operation not in OPCODES:
+            raise NotImplementedError("Operation %s not supported"
+                                      % operation)
+        opcode = OPCODES.get(operation)
+        cmd = opcode.to_bytes(4, 'little')
+        cmd += self.name.to_bytes(8, 'little')
+        cmd += other.name.to_bytes(8, 'little')
+        return cmd
 
     def __del__(self):
-        pass
+        cmd = int(self.name).to_bytes(8, 'little')
+        send_command(self._delete_handler, cmd)
 
     def __len__(self):
         return self.shape[0]

@@ -6,7 +6,7 @@
 
 #include "server.decl.h"
 
-#define REPLY_SIZE 8
+#define NAME_SIZE 8
     
 using aum_name_t = uint64_t;
 
@@ -26,7 +26,13 @@ public:
 
     inline static void insert(aum_name_t name, aum::matrix const& mat)
     {
+        CkPrintf("Created array %lld on server\n", name);
         symbol_table.emplace(name, mat);
+    }
+
+    inline static void remove(aum_name_t name)
+    {
+        symbol_table.erase(name);
     }
 
     inline static aum_name_t get_name()
@@ -45,7 +51,8 @@ public:
     static void operation_handler(char* msg)
     {
         auto res_name = get_name();
-        uint32_t* opcode = reinterpret_cast<uint32_t*>(msg);
+        char* cmd = msg + CmiMsgHeaderSizeBytes;
+        uint32_t* opcode = reinterpret_cast<uint32_t*>(cmd);
         switch(*opcode)
         {
             case 0: {
@@ -54,19 +61,20 @@ public:
             }
             case 1: {
                 // addition
-                uint64_t* name1 = reinterpret_cast<uint64_t*>(msg + 4);
-                uint64_t* name2 = reinterpret_cast<uint64_t*>(msg + 12);
+                uint64_t* name1 = reinterpret_cast<uint64_t*>(cmd + 4);
+                uint64_t* name2 = reinterpret_cast<uint64_t*>(cmd + 12);
                 auto& c1 = lookup(*name1);
                 auto& c2 = lookup(*name2);
                 auto op = aum::bind::operation<aum::matrix, aum::matrix>(c1, c2);
                 auto res = op.execute(aum::bind::oper::add);
                 insert(res_name, res);
+                break;
             }
             default: {
                 CmiAbort("Operation not implemented");
             }
         }
-        CcsSendReply(REPLY_SIZE, (void*) &res_name);
+        CcsSendReply(NAME_SIZE, (void*) &res_name);
     }
     
     static void creation_handler(char* msg)
@@ -101,13 +109,21 @@ public:
                 CmiAbort("Greater than 2 dimensions not supported");
             }
         }
-        CkPrintf("Created array %lld on server\n", res_name);
-        CcsSendReply(REPLY_SIZE, (void*) &res_name);
+        CcsSendReply(NAME_SIZE, (void*) &res_name);
     }
 
     static void fetch_handler(char* msg)
     {
         CmiAbort("Fetching not implemented");
+    }
+
+    static void delete_handler(char* msg)
+    {
+        char* cmd = msg + CmiMsgHeaderSizeBytes;
+        uint64_t* name = reinterpret_cast<uint64_t*>(cmd);
+        remove(*name);
+        CkPrintf("Deleted array %lld on server\n", *name);
+        CcsSendReply(NAME_SIZE, (void*) name);
     }
 
     inline static void exit_server(char* msg)
@@ -120,6 +136,7 @@ public:
         CcsRegisterHandler("aum_operation", (CmiHandler) operation_handler);
         CcsRegisterHandler("aum_creation", (CmiHandler) creation_handler);
         CcsRegisterHandler("aum_fetch", (CmiHandler) fetch_handler);
+        CcsRegisterHandler("aum_delete", (CmiHandler) delete_handler);
         CcsRegisterHandler("aum_exit", (CmiHandler) exit_server);
     }
 };
