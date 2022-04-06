@@ -6,6 +6,7 @@ def f():
     y = ndarray(2, [1000, 1000], np.float64)
 
     z = x + y
+    z -= x
 
 connect("172.17.0.1", 10000)
 z = f()

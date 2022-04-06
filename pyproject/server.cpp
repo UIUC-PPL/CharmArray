@@ -53,6 +53,11 @@ public:
         auto res_name = get_name();
         char* cmd = msg + CmiMsgHeaderSizeBytes;
         uint32_t* opcode = reinterpret_cast<uint32_t*>(cmd);
+        uint64_t* name1 = reinterpret_cast<uint64_t*>(cmd + 4);
+        uint64_t* name2 = reinterpret_cast<uint64_t*>(cmd + 12);
+        auto& c1 = lookup(*name1);
+        auto& c2 = lookup(*name2);
+        auto op = aum::bind::operation(c1, c2);
         switch(*opcode)
         {
             case 0: {
@@ -61,15 +66,22 @@ public:
             }
             case 1: {
                 // addition
-                uint64_t* name1 = reinterpret_cast<uint64_t*>(cmd + 4);
-                uint64_t* name2 = reinterpret_cast<uint64_t*>(cmd + 12);
-                auto& c1 = lookup(*name1);
-                auto& c2 = lookup(*name2);
-                auto op = aum::bind::operation<aum::matrix, aum::matrix>(c1, c2);
                 auto res = op.execute(aum::bind::oper::add);
                 insert(res_name, res);
                 break;
             }
+            case 2: {
+                // subtraction
+                auto res = op.execute(aum::bind::oper::sub);
+                insert(res_name, res);
+                break;
+            }
+            // case 5: {
+            //     // matmul
+            //     auto res = op.execute(aum::bind::oper::mul);
+            //     insert(res_name, res);
+            //     break;
+            // }
             default: {
                 CmiAbort("Operation not implemented");
             }

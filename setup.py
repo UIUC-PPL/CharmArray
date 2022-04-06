@@ -1,13 +1,21 @@
 import sys
+import os
+import subprocess
 from setuptools import setup, find_packages
 
 
 def get_version():
-    import os
     data = {}
     fname = os.path.join('pyproject', '__init__.py')
     exec(compile(open(fname).read(), fname, 'exec'), data)
     return data.get('__version__')
+
+
+def compile_server():
+    charmc = os.environ.get('CHARMC', '~/charm/netlrts-linux-x86_64/bin/charmc')
+    aum_base = os.environ.get('AUM_HOME', '~/LibAum')
+    subprocess.run(["make", "-C", "pyproject/",
+                    "CHARMC=%s" % charmc, "BASE_DIR=%s" % aum_base])
 
 
 install_requires = ['numpy', 'charm4py']
@@ -21,17 +29,16 @@ Intended Audience :: Science/Research
 License :: OSI Approved :: BSD License
 Natural Language :: English
 Operating System :: MacOS :: MacOS X
-Operating System :: Microsoft :: Windows
 Operating System :: POSIX
 Operating System :: Unix
 Programming Language :: Python
-Programming Language :: Python :: 2.7
 Programming Language :: Python :: 3
-Topic :: Scientific/Engineering
 Topic :: Software Development :: Libraries
 Topic :: Utilities
 '''
 classifiers = [x.strip() for x in classes.splitlines() if x]
+
+compile_server()
 
 setup(
     name='pyproject',
