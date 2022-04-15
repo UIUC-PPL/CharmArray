@@ -1,6 +1,6 @@
 #include <aum/aum.hpp>
-#include <PyBind/operation.hpp>
 #include <unordered_map>
+#include <variant>
 #include "converse.h"
 #include "conv-ccs.h"
 
@@ -9,25 +9,23 @@
 #define NAME_SIZE 8
     
 using aum_name_t = uint64_t;
+using aum_array_t = std::variant<aum::scalar, aum::vector, aum::matrix>;
 
-std::unordered_map<aum_name_t, aum::matrix> symbol_table;
-aum_name_t next_name;
+std::unordered_map<aum_name_t, aum_array_t> symbol_table;
+aum_name_t next_name = 0;
 
 class Main : public CBase_Main
 {
-private:
-    // FIXME - how to handle different types?
 public:
     Main(CkArgMsg* msg) 
     {
-        next_name = 0;
         register_handlers();
     }
 
-    inline static void insert(aum_name_t name, aum::matrix const& mat)
+    inline static void insert(aum_name_t name, aum_array_t arr)
     {
         CkPrintf("Created array %lld on server\n", name);
-        symbol_table.emplace(name, mat);
+        symbol_table.emplace(name, arr);
     }
 
     inline static void remove(aum_name_t name)
@@ -40,7 +38,7 @@ public:
         return next_name++;
     }
 
-    static aum::matrix& lookup(aum_name_t name)
+    static aum_array_t& lookup(aum_name_t name)
     {
         auto find = symbol_table.find(name);
         if (find == std::end(symbol_table))
@@ -55,9 +53,8 @@ public:
         uint32_t* opcode = reinterpret_cast<uint32_t*>(cmd);
         uint64_t* name1 = reinterpret_cast<uint64_t*>(cmd + 4);
         uint64_t* name2 = reinterpret_cast<uint64_t*>(cmd + 12);
-        auto& c1 = lookup(*name1);
-        auto& c2 = lookup(*name2);
-        auto op = aum::bind::operation(c1, c2);
+        aum_array_t& c1 = lookup(*name1);
+        aum_array_t& c2 = lookup(*name2);
         switch(*opcode)
         {
             case 0: {
@@ -66,22 +63,53 @@ public:
             }
             case 1: {
                 // addition
-                auto res = op.execute(aum::bind::oper::add);
-                insert(res_name, res);
+                std::visit(
+                    [&](auto& x, auto& y) {
+                        using T = std::decay_t<decltype(x)>;
+                        using V = std::decay_t<decltype(y)>;
+                        aum_array_t res;
+                        if constexpr(std::is_same_v<T, V>)
+                            res = x + y;
+                        else
+                            CmiAbort("Operation not permitted");
+                        insert(res_name, res);
+                    }, c1, c2);
                 break;
             }
             case 2: {
                 // subtraction
-                auto res = op.execute(aum::bind::oper::sub);
-                insert(res_name, res);
+                std::visit(
+                    [&](auto& x, auto& y) {
+                        using T = std::decay_t<decltype(x)>;
+                        using V = std::decay_t<decltype(y)>;
+                        aum_array_t res;
+                        if constexpr(std::is_same_v<T, V>)
+                            res = x - y;
+                        else
+                            CmiAbort("Operation not permitted");
+                        insert(res_name, res);
+                    }, c1, c2);
                 break;
             }
-            // case 5: {
-            //     // matmul
-            //     auto res = op.execute(aum::bind::oper::mul);
-            //     insert(res_name, res);
-            //     break;
-            // }
+            case 5: {
+                // mat/vec mul
+                std::visit(
+                    [&](auto& x, auto& y) {
+                        using T = std::decay_t<decltype(x)>;
+                        using V = std::decay_t<decltype(y)>;
+                        aum_array_t res;
+                        if constexpr(std::is_same_v<T, aum::matrix> && std::is_same_v<V, aum::matrix>)
+                            // Matmul here
+                            CmiAbort("Matrix multiplication not yet implemented");
+                        else if constexpr((std::is_same_v<T, aum::matrix> || 
+                                    std::is_same_v<T, aum::vector>) && std::is_same_v<V, aum::vector>)
+                            res = aum::dot(x, y);
+                        else
+                            CmiAbort("Operation not permitted");
+                        insert(res_name, res);
+                    }, c1, c2);
+                break;
+            }
             default: {
                 CmiAbort("Operation not implemented");
             }
@@ -107,7 +135,10 @@ public:
             }
             case 1: {
                 // create vector
-                CmiAbort("Not implemented");
+                uint64_t* size = reinterpret_cast<uint64_t*>(cmd + 4);
+                auto res = aum::vector(*size);
+                insert(res_name, res);
+                break;
             }
             case 2: {
                 // create matrix
@@ -126,7 +157,24 @@ public:
 
     static void fetch_handler(char* msg)
     {
-        CmiAbort("Fetching not implemented");
+        char* cmd = msg + CmiMsgHeaderSizeBytes;
+        aum_name_t* name = reinterpret_cast<aum_name_t*>(cmd);
+        aum_array_t arr = lookup(*name);
+        void* reply = nullptr;
+        int reply_size = 0;
+        std::visit(
+            [&](auto& x) {
+                using T = std::decay_t<decltype(x)>;
+                if constexpr(std::is_same_v<T, aum::scalar>)
+                {
+                    double value = x.get();
+                    reply = (void*) &value;
+                    reply_size += 8;
+                }    
+                else
+                    CmiAbort("Operation not implemented");
+            }, arr);
+        CcsSendReply(reply_size, reply);
     }
 
     static void delete_handler(char* msg)
@@ -135,7 +183,6 @@ public:
         uint64_t* name = reinterpret_cast<uint64_t*>(cmd);
         remove(*name);
         CkPrintf("Deleted array %lld on server\n", *name);
-        CcsSendReply(NAME_SIZE, (void*) name);
     }
 
     inline static void exit_server(char* msg)

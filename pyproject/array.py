@@ -1,4 +1,5 @@
 import sys
+import struct
 import numpy as np
 from pyccs import Server
 
@@ -6,12 +7,24 @@ server = None
 
 OPCODES = {'+': 1, '-': 2, '*': 3, '/': 4, '@': 5}
 
+def to_bytes(value, dtype='i'):
+    return struct.pack(dtype, value)
+
+def from_bytes(bvalue, dtype='i'):
+    return struct.unpack(dtype, bvalue)[0]
+
 def create_ndarray(name, ndim, shape, dtype):
-    return ndarray(ndim, shape, dtype, name)
+    return ndarray(ndim, shape, dtype, name=name)
+
+def send_command_raw(handler, msg, reply_size):
+    server.send_request(handler, 0, msg)
+    return server.receive_response(reply_size)
 
 def send_command(handler, msg, reply_size=8):
+    return from_bytes(send_command_raw(handler, msg, reply_size), 'l')
+
+def send_command_async(handler, msg):
     server.send_request(handler, 0, msg)
-    return int.from_bytes(server.receive_response(reply_size), 'little')
 
 def connect(server_ip, server_port):
     global server
@@ -19,7 +32,7 @@ def connect(server_ip, server_port):
     server.connect()
 
 class ndarray:
-    def __init__(self, ndim, shape, dtype, name=None):
+    def __init__(self, ndim, shape, dtype, value=None, name=None):
         """
         This is the wrapper class for AUM array objects.
         The argument 'name' should be None except when wrapping
@@ -31,7 +44,12 @@ class ndarray:
         self.dtype = dtype
         self.ndim = ndim
         self.itemsize = np.dtype(dtype).itemsize
-        self.shape = np.asarray(shape, dtype=np.int32)
+        if self.ndim == 0 and value:
+            self.value = value
+        if isinstance(shape, np.ndarray) or isinstance(shape, list):
+            self.shape = np.asarray(shape, dtype=np.int32)
+        else:
+            self.shape = np.asarray([shape], dtype=np.int32)
         self.size = np.prod(self.shape)
         self._creation_handler = b'aum_creation'
         self._operation_handler = b'aum_operation'
@@ -48,16 +66,17 @@ class ndarray:
         """
         Generate array creation CCS command
         """
-        cmd = int(self.ndim).to_bytes(4, 'little')
+        cmd = to_bytes(self.ndim, 'i')
         for s in self.shape:
-            cmd += int(s).to_bytes(8, 'little')
+            cmd += to_bytes(s, 'l')
         return cmd
 
     def _get_fetch_command(self):
         """
         Generate CCS command to fetch entire array data
         """
-        pass
+        cmd = to_bytes(self.name, 'l')
+        return cmd
 
     def _get_operation_command(self, operation, other):
         """
@@ -67,14 +86,14 @@ class ndarray:
             raise NotImplementedError("Operation %s not supported"
                                       % operation)
         opcode = OPCODES.get(operation)
-        cmd = opcode.to_bytes(4, 'little')
-        cmd += self.name.to_bytes(8, 'little')
-        cmd += other.name.to_bytes(8, 'little')
+        cmd = to_bytes(opcode, 'i')
+        cmd += to_bytes(self.name, 'l')
+        cmd += to_bytes(other.name, 'l')
         return cmd
 
     def __del__(self):
-        cmd = int(self.name).to_bytes(8, 'little')
-        send_command(self._delete_handler, cmd)
+        cmd = to_bytes(self.name, 'l')
+        send_command_async(self._delete_handler, cmd)
 
     def __len__(self):
         return self.shape[0]
@@ -114,14 +133,38 @@ class ndarray:
         return self * other
 
     def __matmul__(self, other):
+        if self.ndim == 2 and other.ndim == 2:
+            res_ndim = 2
+            if self.shape[1] != other.shape[0]:
+                raise RuntimeError("Shape mismatch")
+            res_shape = np.array([self.shape[0], other.shape[1]],
+                                 dtype=np.int32)
+        elif self.ndim == 2 and other.ndim == 1:
+            res_ndim = 1
+            if self.shape[1] != other.shape[0]:
+                raise RuntimeError("Shape mismatch")
+            res_shape = np.array([self.shape[0]], dtype=np.int32)
+        elif self.ndim == 1 and other.ndim == 1:
+            res_ndim = 0
+            if self.shape[0] != other.shape[0]:
+                raise RuntimeError("Shape mismatch")
+            res_shape = np.array([], dtype=np.int32)
+        else:
+            raise RuntimeError("Dimension mismatch")
+
         cmd = self._get_operation_command("@", other)
         res = send_command(self._operation_handler, cmd)
         return create_ndarray(res, res_ndim, res_shape, self.dtype)
 
-    def to_numpy(self):
-        total_size = self.size * self.dtype.itemsize
+    def get(self):
         cmd = self._get_fetch_command()
-        data_ptr = send_command(self._fetch_handler, cmd, reply_size=total_size)
-        data = cast(memoryview, data_ptr)
-        return np.frombuffer(data, np.dtype(self.dtype)).copy()
+        if self.ndim == 0:
+            total_size = self.itemsize
+            data_bytes = send_command_raw(self._fetch_handler, cmd, reply_size=total_size)
+            return from_bytes(data_bytes, np.dtype(self.dtype).char)
+        else:
+            total_size = self.size * self.itemsize
+            data_ptr = send_command(self._fetch_handler, cmd, reply_size=total_size)
+            data = cast(memoryview, data_ptr)
+            return np.frombuffer(data, np.dtype(self.dtype)).copy()
 
