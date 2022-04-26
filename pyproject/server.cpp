@@ -46,7 +46,36 @@ public:
         return find->second;
     }
 
-    static void operation_handler(char* msg)
+    static void monop_handler(char* msg)
+    {
+        auto res_name = get_name();
+        char* cmd = msg + CmiMsgHeaderSizeBytes;
+        uint32_t* opcode = reinterpret_cast<uint32_t*>(cmd);
+        uint64_t* name1 = reinterpret_cast<uint64_t*>(cmd + 4);
+        aum_array_t& c1 = lookup(*name1);
+        switch(*opcode)
+        {
+            // FIXME implement a matrix copy
+            case 6: {
+                std::visit(
+                    [&](auto& x) {
+                        using T = std::decay_t<decltype(x)>;
+                        if constexpr(std::is_same_v<T, aum::scalar> || std::is_same_v<T, aum::vector>)
+                        {
+                            aum_array_t res = aum::copy(x); 
+                            insert(res_name, res);
+                        }
+                        else
+                        {
+                            CmiAbort("Matrix copy not implemented!");
+                        }
+                    }, c1);
+            }
+        }
+        CcsSendReply(NAME_SIZE, (void*) &res_name);
+    }
+
+    static void binop_handler(char* msg)
     {
         auto res_name = get_name();
         char* cmd = msg + CmiMsgHeaderSizeBytes;
@@ -91,6 +120,21 @@ public:
                     }, c1, c2);
                 break;
             }
+            case 4: {
+                // division
+                std::visit(
+                    [&](auto& x, auto& y) {
+                        using T = std::decay_t<decltype(x)>;
+                        using V = std::decay_t<decltype(y)>;
+                        aum_array_t res;
+                        if constexpr(std::is_same_v<T, aum::scalar> && std::is_same_v<V, aum::scalar>)
+                            res = x / y;
+                        else
+                            CmiAbort("Operation not permitted");
+                        insert(res_name, res);
+                    }, c1, c2);
+                break;
+            }
             case 5: {
                 // mat/vec mul
                 std::visit(
@@ -127,6 +171,7 @@ public:
         auto res_name = get_name();
         char* cmd = msg + CmiMsgHeaderSizeBytes;
         uint32_t* ndim = reinterpret_cast<uint32_t*>(cmd);
+        bool* has_init = reinterpret_cast<bool*>(cmd + 4);
         switch(*ndim)
         {
             case 0: {
@@ -135,16 +180,34 @@ public:
             }
             case 1: {
                 // create vector
-                uint64_t* size = reinterpret_cast<uint64_t*>(cmd + 4);
-                auto res = aum::vector(*size);
+                uint64_t* size = reinterpret_cast<uint64_t*>(cmd + 5);
+                aum_array_t res;
+                if (*has_init)
+                {
+                    double* init_value = reinterpret_cast<double*>(cmd + 13);
+                    res = aum::vector(*size, *init_value);
+                }
+                else
+                {
+                    res = aum::vector(*size);
+                }
                 insert(res_name, res);
                 break;
             }
             case 2: {
                 // create matrix
-                uint64_t* size1 = reinterpret_cast<uint64_t*>(cmd + 4);
-                uint64_t* size2 = reinterpret_cast<uint64_t*>(cmd + 12);
-                auto res = aum::matrix(*size1, *size2);
+                uint64_t* size1 = reinterpret_cast<uint64_t*>(cmd + 5);
+                uint64_t* size2 = reinterpret_cast<uint64_t*>(cmd + 13);
+                aum_array_t res;
+                if (*has_init)
+                {
+                    double* init_value = reinterpret_cast<double*>(cmd + 21);
+                    res = aum::matrix(*size1, *size2, *init_value);
+                }
+                else
+                {
+                    res = aum::matrix(*size1, *size2);
+                }
                 insert(res_name, res);
                 break;
             }
@@ -159,7 +222,7 @@ public:
     {
         char* cmd = msg + CmiMsgHeaderSizeBytes;
         aum_name_t* name = reinterpret_cast<aum_name_t*>(cmd);
-        aum_array_t arr = lookup(*name);
+        aum_array_t& arr = lookup(*name);
         void* reply = nullptr;
         int reply_size = 0;
         std::visit(
@@ -170,11 +233,11 @@ public:
                     double value = x.get();
                     reply = (void*) &value;
                     reply_size += 8;
+                    CcsSendReply(reply_size, reply);
                 }    
                 else
                     CmiAbort("Operation not implemented");
             }, arr);
-        CcsSendReply(reply_size, reply);
     }
 
     static void delete_handler(char* msg)
@@ -192,7 +255,8 @@ public:
 
     void register_handlers()
     {
-        CcsRegisterHandler("aum_operation", (CmiHandler) operation_handler);
+        CcsRegisterHandler("aum_binop", (CmiHandler) binop_handler);
+        CcsRegisterHandler("aum_monop", (CmiHandler) monop_handler);
         CcsRegisterHandler("aum_creation", (CmiHandler) creation_handler);
         CcsRegisterHandler("aum_fetch", (CmiHandler) fetch_handler);
         CcsRegisterHandler("aum_delete", (CmiHandler) delete_handler);

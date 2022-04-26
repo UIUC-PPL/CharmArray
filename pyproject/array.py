@@ -5,7 +5,7 @@ from pyccs import Server
 
 server = None
 
-OPCODES = {'+': 1, '-': 2, '*': 3, '/': 4, '@': 5}
+OPCODES = {'+': 1, '-': 2, '*': 3, '/': 4, '@': 5, 'copy': 6}
 
 def to_bytes(value, dtype='i'):
     return struct.pack(dtype, value)
@@ -32,7 +32,7 @@ def connect(server_ip, server_port):
     server.connect()
 
 class ndarray:
-    def __init__(self, ndim, shape, dtype, value=None, name=None):
+    def __init__(self, ndim, shape, dtype, init_value=None, name=None):
         """
         This is the wrapper class for AUM array objects.
         The argument 'name' should be None except when wrapping
@@ -44,15 +44,15 @@ class ndarray:
         self.dtype = dtype
         self.ndim = ndim
         self.itemsize = np.dtype(dtype).itemsize
-        if self.ndim == 0 and value:
-            self.value = value
+        self.init_value = init_value
         if isinstance(shape, np.ndarray) or isinstance(shape, list):
             self.shape = np.asarray(shape, dtype=np.int32)
         else:
             self.shape = np.asarray([shape], dtype=np.int32)
         self.size = np.prod(self.shape)
         self._creation_handler = b'aum_creation'
-        self._operation_handler = b'aum_operation'
+        self._binop_handler = b'aum_binop'
+        self._monop_handler = b'aum_monop'
         self._fetch_handler = b'aum_fetch'
         self._delete_handler = b'aum_delete'
         self._exit_handler = b'aum_exit'
@@ -67,8 +67,11 @@ class ndarray:
         Generate array creation CCS command
         """
         cmd = to_bytes(self.ndim, 'i')
+        cmd += to_bytes(self.init_value is not None, '?')
         for s in self.shape:
             cmd += to_bytes(s, 'l')
+        if self.init_value is not None:
+            cmd += to_bytes(self.init_value, 'd')
         return cmd
 
     def _get_fetch_command(self):
@@ -91,6 +94,15 @@ class ndarray:
         cmd += to_bytes(other.name, 'l')
         return cmd
 
+    def _get_copy_command(self):
+        """
+        Generate CCS command for copy
+        """
+        opcode = OPCODES.get('copy')
+        cmd = to_bytes(opcode, 'i')
+        cmd += to_bytes(self.name, 'l')
+        return cmd
+
     def __del__(self):
         cmd = to_bytes(self.name, 'l')
         send_command_async(self._delete_handler, cmd)
@@ -109,7 +121,7 @@ class ndarray:
             raise RuntimeError("Shape mismatch %s and %s" % (self.shape,
                                                              other.shape))
         cmd = self._get_operation_command("+", other)
-        res = send_command(self._operation_handler, cmd)
+        res = send_command(self._binop_handler, cmd)
         return create_ndarray(res, self.ndim, self.shape, self.dtype)
 
     def __radd__(self, other):
@@ -120,7 +132,7 @@ class ndarray:
             raise RuntimeError("Shape mismatch %s and %s" % (self.shape,
                                                              other.shape))
         cmd = self._get_operation_command("-", other)
-        res = send_command(self._operation_handler, cmd)
+        res = send_command(self._binop_handler, cmd)
         return create_ndarray(res, self.ndim, self.shape, self.dtype)
 
     def __rsub__(self, other):
@@ -131,6 +143,13 @@ class ndarray:
 
     def __rmul__(self, other):
         return self * other
+
+    def __truediv__(self, other):
+        if self.ndim > 0 or other.ndim > 0:
+            RuntimeError("Cannote divide two arrays")
+        cmd = self._get_operation_command("/", other)
+        res = send_command(self._binop_handler, cmd)
+        return create_ndarray(res, self.ndim, self.shape, self.dtype)
 
     def __matmul__(self, other):
         if self.ndim == 2 and other.ndim == 2:
@@ -153,7 +172,7 @@ class ndarray:
             raise RuntimeError("Dimension mismatch")
 
         cmd = self._get_operation_command("@", other)
-        res = send_command(self._operation_handler, cmd)
+        res = send_command(self._binop_handler, cmd)
         return create_ndarray(res, res_ndim, res_shape, self.dtype)
 
     def get(self):
@@ -167,4 +186,9 @@ class ndarray:
             data_ptr = send_command(self._fetch_handler, cmd, reply_size=total_size)
             data = cast(memoryview, data_ptr)
             return np.frombuffer(data, np.dtype(self.dtype)).copy()
+
+    def copy(self):
+        cmd = self._get_copy_command()
+        res = send_command(self._monop_handler, cmd)
+        return create_ndarray(res, self.ndim, self.shape, self.dtype)
 
