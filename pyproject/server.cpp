@@ -46,44 +46,11 @@ public:
         return find->second;
     }
 
-    static void monop_handler(char* msg)
+    static void operation_handler(char* msg)
     {
         auto res_name = get_name();
         char* cmd = msg + CmiMsgHeaderSizeBytes;
         uint32_t* opcode = reinterpret_cast<uint32_t*>(cmd);
-        uint64_t* name1 = reinterpret_cast<uint64_t*>(cmd + 4);
-        aum_array_t& c1 = lookup(*name1);
-        switch(*opcode)
-        {
-            // FIXME implement a matrix copy
-            case 6: {
-                std::visit(
-                    [&](auto& x) {
-                        using T = std::decay_t<decltype(x)>;
-                        if constexpr(std::is_same_v<T, aum::scalar> || std::is_same_v<T, aum::vector>)
-                        {
-                            aum_array_t res = aum::copy(x); 
-                            insert(res_name, res);
-                        }
-                        else
-                        {
-                            CmiAbort("Matrix copy not implemented!");
-                        }
-                    }, c1);
-            }
-        }
-        CcsSendReply(NAME_SIZE, (void*) &res_name);
-    }
-
-    static void binop_handler(char* msg)
-    {
-        auto res_name = get_name();
-        char* cmd = msg + CmiMsgHeaderSizeBytes;
-        uint32_t* opcode = reinterpret_cast<uint32_t*>(cmd);
-        uint64_t* name1 = reinterpret_cast<uint64_t*>(cmd + 4);
-        uint64_t* name2 = reinterpret_cast<uint64_t*>(cmd + 12);
-        aum_array_t& c1 = lookup(*name1);
-        aum_array_t& c2 = lookup(*name2);
         switch(*opcode)
         {
             case 0: {
@@ -92,6 +59,10 @@ public:
             }
             case 1: {
                 // addition
+                uint64_t* name1 = reinterpret_cast<uint64_t*>(cmd + 4);
+                uint64_t* name2 = reinterpret_cast<uint64_t*>(cmd + 12);
+                aum_array_t& c1 = lookup(*name1);
+                aum_array_t& c2 = lookup(*name2);
                 std::visit(
                     [&](auto& x, auto& y) {
                         using T = std::decay_t<decltype(x)>;
@@ -107,6 +78,10 @@ public:
             }
             case 2: {
                 // subtraction
+                uint64_t* name1 = reinterpret_cast<uint64_t*>(cmd + 4);
+                uint64_t* name2 = reinterpret_cast<uint64_t*>(cmd + 12);
+                aum_array_t& c1 = lookup(*name1);
+                aum_array_t& c2 = lookup(*name2);
                 std::visit(
                     [&](auto& x, auto& y) {
                         using T = std::decay_t<decltype(x)>;
@@ -120,8 +95,31 @@ public:
                     }, c1, c2);
                 break;
             }
+            case 3: {
+                // multiply
+                uint64_t* name1 = reinterpret_cast<uint64_t*>(cmd + 4);
+                uint64_t* name2 = reinterpret_cast<uint64_t*>(cmd + 12);
+                aum_array_t& c1 = lookup(*name1);
+                aum_array_t& c2 = lookup(*name2);
+                std::visit(
+                    [&](auto& x, auto& y) {
+                        using T = std::decay_t<decltype(x)>;
+                        using V = std::decay_t<decltype(y)>;
+                        aum_array_t res;
+                        if constexpr(std::is_same_v<T, aum::scalar>)
+                            res = x * y;
+                        else
+                            CmiAbort("Operation not permitted");
+                        insert(res_name, res);
+                    }, c1, c2);
+                break;
+            }
             case 4: {
                 // division
+                uint64_t* name1 = reinterpret_cast<uint64_t*>(cmd + 4);
+                uint64_t* name2 = reinterpret_cast<uint64_t*>(cmd + 12);
+                aum_array_t& c1 = lookup(*name1);
+                aum_array_t& c2 = lookup(*name2);
                 std::visit(
                     [&](auto& x, auto& y) {
                         using T = std::decay_t<decltype(x)>;
@@ -137,6 +135,10 @@ public:
             }
             case 5: {
                 // mat/vec mul
+                uint64_t* name1 = reinterpret_cast<uint64_t*>(cmd + 4);
+                uint64_t* name2 = reinterpret_cast<uint64_t*>(cmd + 12);
+                aum_array_t& c1 = lookup(*name1);
+                aum_array_t& c2 = lookup(*name2);
                 std::visit(
                     [&](auto& x, auto& y) {
                         using T = std::decay_t<decltype(x)>;
@@ -148,6 +150,106 @@ public:
                         else if constexpr((std::is_same_v<T, aum::matrix> || 
                                     std::is_same_v<T, aum::vector>) && std::is_same_v<V, aum::vector>)
                             res = aum::dot(x, y);
+                        else
+                            CmiAbort("Operation not permitted");
+                        insert(res_name, res);
+                    }, c1, c2);
+                break;
+            }
+            // FIXME implement a matrix copy
+            case 6: {
+                uint64_t* name1 = reinterpret_cast<uint64_t*>(cmd + 4);
+                aum_array_t& c1 = lookup(*name1);
+                std::visit(
+                    [&](auto& x) {
+                        using T = std::decay_t<decltype(x)>;
+                        if constexpr(std::is_same_v<T, aum::scalar> || std::is_same_v<T, aum::vector>)
+                        {
+                            aum_array_t res = aum::copy(x); 
+                            insert(res_name, res);
+                        }
+                        else
+                        {
+                            CmiAbort("Matrix copy not implemented!");
+                        }
+                    }, c1);
+                break;
+            }
+            case 7: {
+                // axpy
+                uint64_t* name1 = reinterpret_cast<uint64_t*>(cmd + 4);
+                uint64_t* name2 = reinterpret_cast<uint64_t*>(cmd + 12);
+                uint64_t* name3 = reinterpret_cast<uint64_t*>(cmd + 20);
+                aum_array_t& c1 = lookup(*name1);
+                aum_array_t& c2 = lookup(*name2);
+                aum_array_t& c3 = lookup(*name3);
+                std::visit(
+                    [&](auto& a, auto& x, auto& y) {
+                        using S = std::decay_t<decltype(a)>;
+                        using T = std::decay_t<decltype(x)>;
+                        using V = std::decay_t<decltype(y)>;
+                        aum_array_t res;
+                        if constexpr(std::is_same_v<S, aum::scalar> && std::is_same_v<T, aum::vector> &&
+                                std::is_same_v<V, aum::vector>)
+                            res = aum::blas::axpy(a, x, y);
+                        else
+                            CmiAbort("Operation not permitted");
+                        insert(res_name, res);
+                    }, c1, c2, c3);
+                break;
+            }
+            case 8: {
+                // axpy multiplier
+                uint64_t* name1 = reinterpret_cast<uint64_t*>(cmd + 4);
+                uint64_t* name2 = reinterpret_cast<uint64_t*>(cmd + 12);
+                uint64_t* name3 = reinterpret_cast<uint64_t*>(cmd + 20);
+                double* multiplier = reinterpret_cast<double*>(cmd + 28);
+                CkPrintf("Multiplier = %f\n", *multiplier);
+                aum_array_t& c1 = lookup(*name1);
+                aum_array_t& c2 = lookup(*name2);
+                aum_array_t& c3 = lookup(*name3);
+                std::visit(
+                    [&](auto& a, auto& x, auto& y) {
+                        using S = std::decay_t<decltype(a)>;
+                        using T = std::decay_t<decltype(x)>;
+                        using V = std::decay_t<decltype(y)>;
+                        aum_array_t res;
+                        if constexpr(std::is_same_v<S, aum::scalar> && std::is_same_v<T, aum::vector> &&
+                                std::is_same_v<V, aum::vector>)
+                            res = aum::blas::axpy(*multiplier, a, x, y);
+                        else
+                            CmiAbort("Operation not permitted");
+                        insert(res_name, res);
+                    }, c1, c2, c3);
+                break;
+            }
+            case 9: {
+                // multiply
+                uint64_t* name1 = reinterpret_cast<uint64_t*>(cmd + 4);
+                double* y = reinterpret_cast<double*>(cmd + 12);
+                aum_array_t& c1 = lookup(*name1);
+                std::visit(
+                    [&](auto& x) {
+                        using T = std::decay_t<decltype(x)>;
+                        aum_array_t res;
+                        res = *y * x;
+                        insert(res_name, res);
+                    }, c1);
+                break;
+            }
+            case 10: {
+                // division
+                uint64_t* name1 = reinterpret_cast<uint64_t*>(cmd + 4);
+                uint64_t* name2 = reinterpret_cast<uint64_t*>(cmd + 12);
+                aum_array_t& c1 = lookup(*name1);
+                aum_array_t& c2 = lookup(*name2);
+                std::visit(
+                    [&](auto& x, auto& y) {
+                        using T = std::decay_t<decltype(x)>;
+                        using V = std::decay_t<decltype(y)>;
+                        aum_array_t res;
+                        if constexpr(std::is_same_v<T, aum::scalar> && std::is_same_v<V, aum::scalar>)
+                            res = x / y;
                         else
                             CmiAbort("Operation not permitted");
                         insert(res_name, res);
@@ -189,7 +291,7 @@ public:
                 }
                 else
                 {
-                    res = aum::vector(*size);
+                    res = aum::vector(*size, aum::random{});
                 }
                 insert(res_name, res);
                 break;
@@ -206,7 +308,7 @@ public:
                 }
                 else
                 {
-                    res = aum::matrix(*size1, *size2);
+                    res = aum::matrix(*size1, *size2, aum::random{});
                 }
                 insert(res_name, res);
                 break;
@@ -255,8 +357,7 @@ public:
 
     void register_handlers()
     {
-        CcsRegisterHandler("aum_binop", (CmiHandler) binop_handler);
-        CcsRegisterHandler("aum_monop", (CmiHandler) monop_handler);
+        CcsRegisterHandler("aum_operation", (CmiHandler) operation_handler);
         CcsRegisterHandler("aum_creation", (CmiHandler) creation_handler);
         CcsRegisterHandler("aum_fetch", (CmiHandler) fetch_handler);
         CcsRegisterHandler("aum_delete", (CmiHandler) delete_handler);
