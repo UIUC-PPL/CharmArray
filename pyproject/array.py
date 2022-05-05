@@ -2,7 +2,7 @@ import sys
 import numpy as np
 from pyproject.ccs import to_bytes, from_bytes, send_command_raw, send_command, \
     send_command_async, connect, get_creation_command, get_operation_command, \
-    get_fetch_command, Handlers
+    get_name, get_epoch, get_fetch_command, Handlers
 
 def create_ndarray(name, ndim, shape, dtype):
     return ndarray(ndim, shape, dtype, name=name)
@@ -30,11 +30,15 @@ class ndarray:
         if name:
             self.name = name
         else:
-            cmd = get_creation_command(self)
-            self.name = send_command(Handlers.creation_handler, cmd)
+            self.name = get_name()
+            cmd = get_creation_command(self, self.name)
+            send_command_async(Handlers.creation_handler, cmd)
 
     def __del__(self):
-        cmd = to_bytes(self.name, 'l')
+        msg_size = 20
+        cmd = to_bytes(get_epoch(), 'l')
+        cmd += to_bytes(msg_size, 'I')
+        cmd += to_bytes(self.name, 'l')
         send_command_async(Handlers.delete_handler, cmd)
 
     def __len__(self):
@@ -53,9 +57,10 @@ class ndarray:
         if (self.shape != other.shape).any():
             raise RuntimeError("Shape mismatch %s and %s" % (self.shape,
                                                              other.shape))
-        cmd = get_operation_command("+", [self, other])
-        res = send_command(Handlers.operation_handler, cmd)
-        return create_ndarray(res, self.ndim, self.shape, self.dtype)
+        name = get_name()
+        cmd = get_operation_command("+", name, [self, other])
+        send_command_async(Handlers.operation_handler, cmd)
+        return create_ndarray(name, self.ndim, self.shape, self.dtype)
 
     def __radd__(self, other):
         return self + other
@@ -64,9 +69,10 @@ class ndarray:
         if (self.shape != other.shape).any():
             raise RuntimeError("Shape mismatch %s and %s" % (self.shape,
                                                              other.shape))
-        cmd = get_operation_command("-", [self, other])
-        res = send_command(Handlers.operation_handler, cmd)
-        return create_ndarray(res, self.ndim, self.shape, self.dtype)
+        name = get_name()
+        cmd = get_operation_command("-", name, [self, other])
+        send_command_async(Handlers.operation_handler, cmd)
+        return create_ndarray(name, self.ndim, self.shape, self.dtype)
 
     def __rsub__(self, other):
         return -1 * (self - other)
@@ -78,9 +84,10 @@ class ndarray:
             op = '*'
         elif isinstance(other, float) or isinstance(other, int):
             op = '*s'
-        cmd = get_operation_command(op, [self, other])
-        res = send_command(Handlers.operation_handler, cmd)
-        return create_ndarray(res, self.ndim, self.shape, self.dtype)
+        name = get_name()
+        cmd = get_operation_command(op, name, [self, other])
+        send_command_async(Handlers.operation_handler, cmd)
+        return create_ndarray(name, self.ndim, self.shape, self.dtype)
 
     def __rmul__(self, other):
         return self * other
@@ -92,9 +99,10 @@ class ndarray:
             op = '/'
         elif isinstance(other, float) or isinstance(other, int):
             op = '/s'
-        cmd = get_operation_command(op, [self, other])
-        res = send_command(Handlers.operation_handler, cmd)
-        return create_ndarray(res, self.ndim, self.shape, self.dtype)
+        name = get_name()
+        cmd = get_operation_command(op, name, [self, other])
+        send_command_async(Handlers.operation_handler, cmd)
+        return create_ndarray(name, self.ndim, self.shape, self.dtype)
 
     def __matmul__(self, other):
         if self.ndim == 2 and other.ndim == 2:
@@ -115,10 +123,10 @@ class ndarray:
             res_shape = np.array([], dtype=np.int32)
         else:
             raise RuntimeError("Dimension mismatch")
-
-        cmd = get_operation_command("@", [self, other])
-        res = send_command(Handlers.operation_handler, cmd)
-        return create_ndarray(res, res_ndim, res_shape, self.dtype)
+        name = get_name()
+        cmd = get_operation_command("@", name, [self, other])
+        send_command_async(Handlers.operation_handler, cmd)
+        return create_ndarray(name, res_ndim, res_shape, self.dtype)
 
     def get(self):
         cmd = get_fetch_command(self)
@@ -133,7 +141,8 @@ class ndarray:
             return np.frombuffer(data, np.dtype(self.dtype)).copy()
 
     def copy(self):
-        cmd = get_operation_command("copy", [self])
-        res = send_command(Handlers.operation_handler, cmd)
-        return create_ndarray(res, self.ndim, self.shape, self.dtype)
+        name = get_name()
+        cmd = get_operation_command("copy", name, [self])
+        send_command_async(Handlers.operation_handler, cmd)
+        return create_ndarray(name, self.ndim, self.shape, self.dtype)
 

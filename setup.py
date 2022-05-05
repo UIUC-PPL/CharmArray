@@ -14,7 +14,7 @@ def get_version():
 def compile_server():
     charmc = os.environ.get('CHARMC', '~/charm/netlrts-linux-x86_64/bin/charmc')
     aum_base = os.environ.get('AUM_HOME', '~/LibAum')
-    subprocess.run(["make", "-C", "pyproject/",
+    subprocess.run(["make", "-C", "src/",
                     "CHARMC=%s" % charmc, "BASE_DIR=%s" % aum_base])
 
 

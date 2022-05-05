@@ -29,8 +29,8 @@ def solve(A, b):
 if __name__ == '__main__':
     connect("172.17.0.1", 10000)
 
-    A = ndarray(2, (100, 100), np.float64, init_value=1.)
-    b = ndarray(1, 100, np.float64, init_value=1.)
+    A = ndarray(2, (100, 100), np.float64)
+    b = ndarray(1, 100, np.float64)
     x = solve(A, b)
 
 
