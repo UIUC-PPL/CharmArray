@@ -1,4 +1,5 @@
 import struct
+import atexit
 from pyccs import Server
 from pyproject import array
 
@@ -43,6 +44,12 @@ def connect(server_ip, server_port):
     server = Server(server_ip, server_port)
     server.connect()
     client_id = send_command(Handlers.connection_handler, "")
+    atexit.register(disconnect)
+
+def disconnect():
+    global client_id
+    cmd = to_bytes(client_id, 'I')
+    send_command_async(Handlers.disconnection_handler, cmd)
 
 def get_creation_command(arr, name):
     """
@@ -92,6 +99,7 @@ def get_operation_command(operation, name, operands):
 
 class Handlers(object):
     connection_handler = b'aum_connect'
+    disconnection_handler = b'aum_disconnect'
     creation_handler = b'aum_creation'
     operation_handler = b'aum_operation'
     fetch_handler = b'aum_fetch'

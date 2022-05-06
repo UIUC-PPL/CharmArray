@@ -1,18 +1,17 @@
 #include <aum/aum.hpp>
 
 template<class T>
-inline T extract(char** msgptr, bool increment=true)
+inline T extract(char* &msg, bool increment=true)
 {
-    T arg = *(reinterpret_cast<T*>(*msgptr));
+    T arg = *(reinterpret_cast<T*>(msg));
     if (increment)
-        *msgptr += sizeof(T);
+        msg += sizeof(T);
     return arg;
 }
 
 inline uint64_t extract_epoch(char* msg)
 {
-    char* cmdptr = msg + CmiMsgHeaderSizeBytes;
-    char** cmd = &cmdptr;
+    char* cmd = msg + CmiMsgHeaderSizeBytes;
     return extract<uint64_t>(cmd);
 }
 

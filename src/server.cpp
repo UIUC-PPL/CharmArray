@@ -9,22 +9,25 @@
 
 #include "server.decl.h"
 
-#define NAME_SIZE 8
-    
 using aum_name_t = uint64_t;
 using aum_array_t = std::variant<aum::scalar, aum::vector, aum::matrix>;
 
 std::unordered_map<aum_name_t, aum_array_t> symbol_table;
 std::priority_queue<char*, std::vector<char*>, epoch_compare> message_buffer;
+std::queue<uint8_t> client_ids;
 uint64_t next_epoch = 0;
-uint8_t next_client_id = 0;
 
 class Main : public CBase_Main
 {
 public:
     Main(CkArgMsg* msg) 
     {
+        for (uint16_t i = 0; i < 256; i++)
+            client_ids.push((uint8_t) i);
         register_handlers();
+#ifndef NDEBUG
+        CkPrintf("Initialization done\n");
+#endif
     }
 
     inline static void insert(aum_name_t name, aum_array_t arr)
@@ -45,9 +48,11 @@ public:
 
     inline static uint8_t get_client_id()
     {
-        if (next_client_id == 255)
+        if (client_ids.empty())
             CmiAbort("Too many clients connected to the server");
-        return next_client_id++;
+        uint8_t client_id = client_ids.front();
+        client_ids.pop();
+        return client_id;
     }
 
     static aum_array_t& lookup(aum_name_t name)
@@ -88,8 +93,7 @@ public:
 
     static void operation_handler(char* msg)
     {
-        char* cmdptr = msg + CmiMsgHeaderSizeBytes;
-        char** cmd = &cmdptr;
+        char* cmd = msg + CmiMsgHeaderSizeBytes;
         uint64_t epoch = extract<uint64_t>(cmd);
         uint32_t msg_size = CmiMsgHeaderSizeBytes + extract<uint32_t>(cmd);
         if (epoch > next_epoch)
@@ -321,8 +325,7 @@ public:
          * in each dimension
          */
         // FIXME need a field for dtype
-        char* cmdptr = msg + CmiMsgHeaderSizeBytes;
-        char** cmd = &cmdptr;
+        char* cmd = msg + CmiMsgHeaderSizeBytes;
         uint64_t epoch = extract<uint64_t>(cmd);
         uint32_t msg_size = CmiMsgHeaderSizeBytes + extract<uint32_t>(cmd);
         if (epoch > next_epoch)
@@ -378,8 +381,7 @@ public:
 
     static void fetch_handler(char* msg)
     {
-        char* cmdptr = msg + CmiMsgHeaderSizeBytes;
-        char** cmd = &cmdptr;
+        char* cmd = msg + CmiMsgHeaderSizeBytes;
         uint64_t epoch = extract<uint64_t>(cmd);
         uint32_t msg_size = CmiMsgHeaderSizeBytes + extract<uint32_t>(cmd);
         if (epoch > next_epoch)
@@ -406,8 +408,7 @@ public:
 
     static void delete_handler(char* msg)
     {
-        char* cmdptr = msg + CmiMsgHeaderSizeBytes;
-        char** cmd = &cmdptr;
+        char* cmd = msg + CmiMsgHeaderSizeBytes;
         uint64_t epoch = extract<uint64_t>(cmd);
         uint32_t msg_size = CmiMsgHeaderSizeBytes + extract<uint32_t>(cmd);
         if (epoch > next_epoch)
@@ -423,6 +424,16 @@ public:
         CcsSendReply(1, (void*) &client_id);
     }
 
+    static void disconnection_handler(char* msg)
+    {
+        char* cmd = msg + CmiMsgHeaderSizeBytes;
+        uint8_t client_id = extract<uint8_t>(cmd);
+        client_ids.push(client_id);
+#ifndef NDEBUG
+        CkPrintf("Disconnected %" PRIu8 " from server\n", client_id);
+#endif
+    }
+
     inline static void exit_server(char* msg)
     {
         CkExit();
@@ -431,6 +442,7 @@ public:
     void register_handlers()
     {
         CcsRegisterHandler("aum_connect", (CmiHandler) connection_handler);
+        CcsRegisterHandler("aum_disconnect", (CmiHandler) disconnection_handler);
         CcsRegisterHandler("aum_operation", (CmiHandler) operation_handler);
         CcsRegisterHandler("aum_creation", (CmiHandler) creation_handler);
         CcsRegisterHandler("aum_fetch", (CmiHandler) fetch_handler);
