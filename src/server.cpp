@@ -2,6 +2,7 @@
 #include <unordered_map>
 #include <variant>
 #include <queue>
+#include <stack>
 #include <cinttypes>
 #include "server.h"
 #include "converse.h"
@@ -14,16 +15,17 @@ using aum_array_t = std::variant<aum::scalar, aum::vector, aum::matrix>;
 
 std::unordered_map<aum_name_t, aum_array_t> symbol_table;
 std::priority_queue<char*, std::vector<char*>, epoch_compare> message_buffer;
-std::queue<uint8_t> client_ids;
-uint64_t next_epoch = 0;
+std::stack<uint8_t> client_ids;
+uint64_t next_epoch[256];
 
 class Main : public CBase_Main
 {
 public:
     Main(CkArgMsg* msg) 
     {
-        for (uint16_t i = 0; i < 256; i++)
+        for (int16_t i = 255; i >= 0; i--)
             client_ids.push((uint8_t) i);
+        memset(next_epoch, 0, 256 * sizeof(uint64_t));
         register_handlers();
 #ifndef NDEBUG
         CkPrintf("Initialization done\n");
@@ -50,7 +52,7 @@ public:
     {
         if (client_ids.empty())
             CmiAbort("Too many clients connected to the server");
-        uint8_t client_id = client_ids.front();
+        uint8_t client_id = client_ids.top();
         client_ids.pop();
         return client_id;
     }
@@ -73,18 +75,26 @@ public:
 
     static void flush_buffer()
     {
-        while (extract_epoch(message_buffer.top()) == next_epoch)
+        while (true)
         {
             char* msg = message_buffer.top();
+            char* cmd = msg + CmiMsgHeaderSizeBytes;
+            uint8_t client_id = extract<uint8_t>(cmd);
+            uint64_t epoch = extract<uint64_t>(cmd);
+            if (epoch != next_epoch[client_id])
+                break;
             message_buffer.pop();
             operation_handler(msg);
             free(msg);
-            next_epoch++;
+            next_epoch[client_id]++;
         }
     }
 
     static void insert_buffer(uint32_t msg_size, char* msg)
     {
+#ifndef NDEBUG
+        CkPrintf("Inserting into buffer\n");
+#endif
         char* msg_copy = (char*) malloc(msg_size);
         memcpy(msg_copy, msg, msg_size);
         message_buffer.push(msg_copy);
@@ -94,13 +104,17 @@ public:
     static void operation_handler(char* msg)
     {
         char* cmd = msg + CmiMsgHeaderSizeBytes;
+        uint8_t client_id = extract<uint8_t>(cmd);
         uint64_t epoch = extract<uint64_t>(cmd);
         uint32_t msg_size = CmiMsgHeaderSizeBytes + extract<uint32_t>(cmd);
-        if (epoch > next_epoch)
+        if (epoch > next_epoch[client_id])
             insert_buffer(msg_size, msg);
-        next_epoch++;
+        next_epoch[client_id]++;
         aum_name_t res_name = extract<aum_name_t>(cmd);
         uint32_t opcode = extract<uint32_t>(cmd);
+#ifndef NDEBUG
+        CkPrintf("Operation %" PRIu32 "\n", opcode);
+#endif
         switch(opcode)
         {
             case 0: {
@@ -326,11 +340,12 @@ public:
          */
         // FIXME need a field for dtype
         char* cmd = msg + CmiMsgHeaderSizeBytes;
+        uint8_t client_id = extract<uint8_t>(cmd);
         uint64_t epoch = extract<uint64_t>(cmd);
         uint32_t msg_size = CmiMsgHeaderSizeBytes + extract<uint32_t>(cmd);
-        if (epoch > next_epoch)
+        if (epoch > next_epoch[client_id])
             insert_buffer(msg_size, msg);
-        next_epoch++;
+        next_epoch[client_id]++;
         aum_name_t res_name = extract<aum_name_t>(cmd);
         uint32_t ndim = extract<uint32_t>(cmd);
         bool has_init = extract<bool>(cmd);
@@ -382,11 +397,12 @@ public:
     static void fetch_handler(char* msg)
     {
         char* cmd = msg + CmiMsgHeaderSizeBytes;
+        uint8_t client_id = extract<uint8_t>(cmd);
         uint64_t epoch = extract<uint64_t>(cmd);
         uint32_t msg_size = CmiMsgHeaderSizeBytes + extract<uint32_t>(cmd);
-        if (epoch > next_epoch)
+        if (epoch > next_epoch[client_id])
             insert_buffer(msg_size, msg);
-        next_epoch++;
+        next_epoch[client_id]++;
         aum_name_t name = extract<aum_name_t>(cmd);
         aum_array_t& arr = lookup(name);
         void* reply = nullptr;
@@ -409,11 +425,12 @@ public:
     static void delete_handler(char* msg)
     {
         char* cmd = msg + CmiMsgHeaderSizeBytes;
+        uint8_t client_id = extract<uint8_t>(cmd);
         uint64_t epoch = extract<uint64_t>(cmd);
         uint32_t msg_size = CmiMsgHeaderSizeBytes + extract<uint32_t>(cmd);
-        if (epoch > next_epoch)
+        if (epoch > next_epoch[client_id])
             insert_buffer(msg_size, msg);
-        next_epoch++;
+        next_epoch[client_id]++;
         aum_name_t name = extract<aum_name_t>(cmd);
         remove(name);
     }

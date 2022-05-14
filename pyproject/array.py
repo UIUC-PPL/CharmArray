@@ -35,10 +35,13 @@ class ndarray:
             send_command_async(Handlers.creation_handler, cmd)
 
     def __del__(self):
-        msg_size = 20
-        cmd = to_bytes(get_epoch(), 'l')
+        from pyproject.ccs import client_id
+        global client_id
+        msg_size = 21
+        cmd = to_bytes(client_id, 'B')
+        cmd += to_bytes(get_epoch(), 'L')
         cmd += to_bytes(msg_size, 'I')
-        cmd += to_bytes(self.name, 'l')
+        cmd += to_bytes(self.name, 'L')
         send_command_async(Handlers.delete_handler, cmd)
 
     def __len__(self):

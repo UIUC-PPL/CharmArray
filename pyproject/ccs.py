@@ -23,10 +23,10 @@ def get_name():
     next_name += 1
     return (client_id << 56) + curr_name
 
-def to_bytes(value, dtype='i'):
+def to_bytes(value, dtype='I'):
     return struct.pack(dtype, value)
 
-def from_bytes(bvalue, dtype='i'):
+def from_bytes(bvalue, dtype='I'):
     return struct.unpack(dtype, bvalue)[0]
 
 def send_command_raw(handler, msg, reply_size):
@@ -48,21 +48,23 @@ def connect(server_ip, server_port):
 
 def disconnect():
     global client_id
-    cmd = to_bytes(client_id, 'I')
+    cmd = to_bytes(client_id, 'B')
     send_command_async(Handlers.disconnection_handler, cmd)
 
 def get_creation_command(arr, name):
     """
     Generate array creation CCS command
     """
-    msg_size = 25 + arr.ndim * 8 + (8 if arr.init_value else 0)
-    cmd = to_bytes(get_epoch(), 'l')
+    global client_id
+    msg_size = 26 + arr.ndim * 8 + (8 if arr.init_value else 0)
+    cmd = to_bytes(client_id, 'B')
+    cmd += to_bytes(get_epoch(), 'L')
     cmd += to_bytes(msg_size, 'I')
-    cmd += to_bytes(name, 'l')
+    cmd += to_bytes(name, 'L')
     cmd += to_bytes(arr.ndim, 'I')
     cmd += to_bytes(arr.init_value is not None, '?')
     for s in arr.shape:
-        cmd += to_bytes(int(s), 'l')
+        cmd += to_bytes(int(s), 'L')
     if arr.init_value is not None:
         cmd += to_bytes(arr.init_value, 'd')
     return cmd
@@ -71,28 +73,32 @@ def get_fetch_command(arr):
     """
     Generate CCS command to fetch entire array data
     """
-    msg_size = 20
-    cmd = to_bytes(get_epoch(), 'l')
+    global client_id
+    msg_size = 21
+    cmd = to_bytes(client_id, 'B')
+    cmd += to_bytes(get_epoch(), 'L')
     cmd += to_bytes(msg_size, 'I')
-    cmd += to_bytes(arr.name, 'l')
+    cmd += to_bytes(arr.name, 'L')
     return cmd
 
 def get_operation_command(operation, name, operands):
     """
     Generate CCS command for operation
     """
+    global client_id
     if operation not in OPCODES:
         raise NotImplementedError("Operation %s not supported"
                                   % operation)
-    msg_size = 24 + 8 * len(operands)
+    msg_size = 25 + 8 * len(operands)
     opcode = OPCODES.get(operation)
-    cmd = to_bytes(get_epoch(), 'l')
+    cmd = to_bytes(client_id, 'B')
+    cmd += to_bytes(get_epoch(), 'L')
     cmd += to_bytes(msg_size, 'I')
-    cmd += to_bytes(name, 'l')
+    cmd += to_bytes(name, 'L')
     cmd += to_bytes(opcode, 'I')
     for x in operands:
         if isinstance(x, array.ndarray):
-            cmd += to_bytes(x.name, 'l')
+            cmd += to_bytes(x.name, 'L')
         elif isinstance(x, float) or isinstance(x, int):
             cmd += to_bytes(x, 'd')
     return cmd
