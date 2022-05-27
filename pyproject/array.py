@@ -1,14 +1,19 @@
 import sys
 import numpy as np
+from pyproject.ast import ASTNode
 from pyproject.ccs import to_bytes, from_bytes, send_command_raw, send_command, \
-    send_command_async, connect, get_creation_command, get_operation_command, \
-    get_name, get_epoch, get_fetch_command, Handlers
+    send_command_async, connect, get_creation_command, \
+    get_name, get_fetch_command, Handlers, OPCODES
 
-def create_ndarray(name, ndim, shape, dtype):
-    return ndarray(ndim, shape, dtype, name=name)
+
+def create_ndarray(ndim, dtype, shape=None, name=None, command_buffer=None):
+    return ndarray(ndim, dtype=dtype, shape=shape, name=name,
+                   command_buffer=command_buffer)
+
 
 class ndarray:
-    def __init__(self, ndim, shape, dtype, init_value=None, name=None):
+    def __init__(self, ndim, shape=None, dtype=np.float64, init_value=None,
+                 nparr=None, name=None, command_buffer=None):
         """
         This is the wrapper class for AUM array objects.
         The argument 'name' should be None except when wrapping
@@ -21,28 +26,45 @@ class ndarray:
         self.ndim = ndim
         self.itemsize = np.dtype(dtype).itemsize
         self.init_value = init_value
+        self.command_buffer = command_buffer
         if isinstance(shape, np.ndarray) or isinstance(shape, list) or \
                 isinstance(shape, tuple):
-            self.shape = np.asarray(shape, dtype=np.int32)
+            self._shape = np.asarray(shape, dtype=np.int32)
+        elif shape is not None:
+            self._shape = np.asarray([shape], dtype=np.int32)
         else:
-            self.shape = np.asarray([shape], dtype=np.int32)
-        self.size = np.prod(self.shape)
-        if name:
+            self._shape = np.zeros(self.ndim, dtype=np.int32)
+        self.valid = False
+        if command_buffer is None:
+            self.valid = True
+            if name:
+                self.name = name
+                self.command_buffer = ASTNode(self.name, 0, [self])
+            else:
+                self.name = get_name()
+                if nparr is not None:
+                    buf = nparr.tobytes()
+                else:
+                    buf = None
+                cmd = get_creation_command(self, self.name, buf=buf)
+                if not send_command(Handlers.creation_handler, cmd,
+                                    reply_type='?'):
+                    raise RuntimeError("Error creating array on server")
+                self.command_buffer = ASTNode(self.name, 0, [self])
+        else:
             self.name = name
-        else:
-            self.name = get_name()
-            cmd = get_creation_command(self, self.name)
-            send_command_async(Handlers.creation_handler, cmd)
+
+    @property
+    def shape(self):
+        self._flush_command_buffer()
+        return self._shape
 
     def __del__(self):
         from pyproject.ccs import client_id
         global client_id
-        msg_size = 21
-        cmd = to_bytes(client_id, 'B')
-        cmd += to_bytes(get_epoch(), 'L')
-        cmd += to_bytes(msg_size, 'I')
-        cmd += to_bytes(self.name, 'L')
-        send_command_async(Handlers.delete_handler, cmd)
+        if self.valid:
+            cmd = to_bytes(self.name, 'L')
+            send_command_async(Handlers.delete_handler, cmd)
 
     def __len__(self):
         return self.shape[0]
@@ -50,32 +72,28 @@ class ndarray:
     def __str__(self):
         pass
 
-    def __repr__(self):
-        pass
+    #def __repr__(self):
+    #    #self._flush_command_buffer()
+    #    # FIXME add repr
+    #    pass
 
     def __neg__(self):
         return self * -1
 
     def __add__(self, other):
-        if (self.shape != other.shape).any():
-            raise RuntimeError("Shape mismatch %s and %s" % (self.shape,
-                                                             other.shape))
-        name = get_name()
-        cmd = get_operation_command("+", name, [self, other])
-        send_command_async(Handlers.operation_handler, cmd)
-        return create_ndarray(name, self.ndim, self.shape, self.dtype)
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('+'), [self, other])
+        return create_ndarray(self.ndim, self.dtype,
+                              name=res, command_buffer=cmd_buffer)
 
     def __radd__(self, other):
         return self + other
 
     def __sub__(self, other):
-        if (self.shape != other.shape).any():
-            raise RuntimeError("Shape mismatch %s and %s" % (self.shape,
-                                                             other.shape))
-        name = get_name()
-        cmd = get_operation_command("-", name, [self, other])
-        send_command_async(Handlers.operation_handler, cmd)
-        return create_ndarray(name, self.ndim, self.shape, self.dtype)
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('-'), [self, other])
+        return create_ndarray(self.ndim, self.dtype,
+                              name=res, command_buffer=cmd_buffer)
 
     def __rsub__(self, other):
         return -1 * (self - other)
@@ -87,10 +105,10 @@ class ndarray:
             op = '*'
         elif isinstance(other, float) or isinstance(other, int):
             op = '*s'
-        name = get_name()
-        cmd = get_operation_command(op, name, [self, other])
-        send_command_async(Handlers.operation_handler, cmd)
-        return create_ndarray(name, self.ndim, self.shape, self.dtype)
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get(op), [self, other])
+        return create_ndarray(self.ndim, self.dtype,
+                              name=res, command_buffer=cmd_buffer)
 
     def __rmul__(self, other):
         return self * other
@@ -102,36 +120,51 @@ class ndarray:
             op = '/'
         elif isinstance(other, float) or isinstance(other, int):
             op = '/s'
-        name = get_name()
-        cmd = get_operation_command(op, name, [self, other])
-        send_command_async(Handlers.operation_handler, cmd)
-        return create_ndarray(name, self.ndim, self.shape, self.dtype)
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get(op), [self, other])
+        return create_ndarray(self.ndim, self.dtype,
+                              name=res, command_buffer=cmd_buffer)
 
     def __matmul__(self, other):
         if self.ndim == 2 and other.ndim == 2:
             res_ndim = 2
-            if self.shape[1] != other.shape[0]:
-                raise RuntimeError("Shape mismatch")
-            res_shape = np.array([self.shape[0], other.shape[1]],
-                                 dtype=np.int32)
         elif self.ndim == 2 and other.ndim == 1:
             res_ndim = 1
-            if self.shape[1] != other.shape[0]:
-                raise RuntimeError("Shape mismatch")
-            res_shape = np.array([self.shape[0]], dtype=np.int32)
         elif self.ndim == 1 and other.ndim == 1:
             res_ndim = 0
-            if self.shape[0] != other.shape[0]:
-                raise RuntimeError("Shape mismatch")
-            res_shape = np.array([], dtype=np.int32)
         else:
             raise RuntimeError("Dimension mismatch")
-        name = get_name()
-        cmd = get_operation_command("@", name, [self, other])
-        send_command_async(Handlers.operation_handler, cmd)
-        return create_ndarray(name, res_ndim, res_shape, self.dtype)
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('@'), [self, other])
+        return create_ndarray(res_ndim, self.dtype,
+                              name=res, command_buffer=cmd_buffer)
+
+    def _flush_command_buffer(self):
+        # send the command to server
+        # finally set command buffer to array name
+        if self.valid:
+            return
+        validated_arrays = {self.name : self}
+        cmd = self.command_buffer.get_command(validated_arrays)
+        reply_size = 0
+        for name, arr in validated_arrays.items():
+            reply_size += 8 + 8 * arr.ndim
+        metadata = send_command_raw(Handlers.operation_handler,
+                                    cmd, reply_size=reply_size)
+        # traverse metadata
+        offset = 0
+        for i in range(len(validated_arrays)):
+            name = from_bytes(metadata[offset : offset + 8], 'L')
+            offset += 8
+            arr = validated_arrays[name]
+            for d in range(arr.ndim):
+                arr._shape[d] = from_bytes(metadata[offset : offset + 8], 'L')
+                offset += 8
+            arr.validate()
+        self.validate()
 
     def get(self):
+        self._flush_command_buffer()
         cmd = get_fetch_command(self)
         if self.ndim == 0:
             total_size = self.itemsize
@@ -143,9 +176,17 @@ class ndarray:
             data = cast(memoryview, data_ptr)
             return np.frombuffer(data, np.dtype(self.dtype)).copy()
 
+    def evaluate(self):
+        self._flush_command_buffer()
+
+    def validate(self):
+        self.valid = True
+        self.command_buffer = ASTNode(self.name, 0, [self])
+
     def copy(self):
-        name = get_name()
-        cmd = get_operation_command("copy", name, [self])
-        send_command_async(Handlers.operation_handler, cmd)
-        return create_ndarray(name, self.ndim, self.shape, self.dtype)
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('copy'), [self])
+        return create_ndarray(self.ndim, self.dtype,
+                              name=res, command_buffer=cmd_buffer)
+
 
