@@ -6,14 +6,19 @@ def f():
     v = ndarray(1, 10, np.float64)
     b = ndarray(1, 10, np.float64)
     c = ndarray(1, 10, np.float64)
-    y = v + b + c
-    z = v - y
-    z.evaluate()
-    print(z.shape)
+    w = c
+    for i in range(5):
+        y = v + b + w
+        z = v - y
+        w = 2 * (c - z) + b
+    w.command_buffer.plot_graph()
+    #w.evaluate()
+    #print(w.shape)
+    #print(z.shape)
+    #print(y.shape)
 
 
 if __name__ == '__main__':
-    connect("172.17.0.1", 10000)
+    #connect("172.17.0.1", 10000)
     s = f()
-
 

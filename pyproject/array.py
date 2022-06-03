@@ -1,4 +1,5 @@
 import sys
+import warnings
 import numpy as np
 from pyproject.ast import ASTNode
 from pyproject.ccs import to_bytes, from_bytes, send_command_raw, send_command, \
@@ -49,7 +50,7 @@ class ndarray:
                 cmd = get_creation_command(self, self.name, buf=buf)
                 if not send_command(Handlers.creation_handler, cmd,
                                     reply_type='?'):
-                    raise RuntimeError("Error creating array on server")
+                    warnings.warn("Error creating array on server", RuntimeWarning)
                 self.command_buffer = ASTNode(self.name, 0, [self])
         else:
             self.name = name
@@ -60,8 +61,6 @@ class ndarray:
         return self._shape
 
     def __del__(self):
-        from pyproject.ccs import client_id
-        global client_id
         if self.valid:
             cmd = to_bytes(self.name, 'L')
             send_command_async(Handlers.delete_handler, cmd)
@@ -101,12 +100,8 @@ class ndarray:
     def __mul__(self, other):
         if self.ndim > 0 or (isinstance(other, ndarray) and other.ndim > 0):
             RuntimeError("Cannote multiply two arrays")
-        if isinstance(other, ndarray):
-            op = '*'
-        elif isinstance(other, float) or isinstance(other, int):
-            op = '*s'
         res = get_name()
-        cmd_buffer = ASTNode(res, OPCODES.get(op), [self, other])
+        cmd_buffer = ASTNode(res, OPCODES.get('*'), [self, other])
         return create_ndarray(self.ndim, self.dtype,
                               name=res, command_buffer=cmd_buffer)
 
@@ -116,12 +111,8 @@ class ndarray:
     def __truediv__(self, other):
         if self.ndim > 0 or other.ndim > 0:
             RuntimeError("Cannote divide two arrays")
-        if isinstance(other, ndarray):
-            op = '/'
-        elif isinstance(other, float) or isinstance(other, int):
-            op = '/s'
         res = get_name()
-        cmd_buffer = ASTNode(res, OPCODES.get(op), [self, other])
+        cmd_buffer = ASTNode(res, OPCODES.get('/'), [self, other])
         return create_ndarray(self.ndim, self.dtype,
                               name=res, command_buffer=cmd_buffer)
 

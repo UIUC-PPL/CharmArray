@@ -4,11 +4,11 @@ from pyccs import Server
 from pyproject import array
 
 server = None
-client_id = None
+client_id = 0
 next_name = 0
 
 OPCODES = {'+': 1, '-': 2, '*': 3 ,'/': 4, '@': 5, 'copy': 6, 'axpy': 7,
-           'axpy_multiplier': 8, '*s': 9, '/s': 10}
+           'axpy_multiplier': 8}
 
 INV_OPCODES = {v: k for k, v in OPCODES.items()}
 
@@ -25,14 +25,19 @@ def from_bytes(bvalue, dtype='I'):
     return struct.unpack(dtype, bvalue)[0]
 
 def send_command_raw(handler, msg, reply_size):
-    server.send_request(handler, 0, msg)
-    return server.receive_response(reply_size)
+    if server is not None:
+        server.send_request(handler, 0, msg)
+        return server.receive_response(reply_size)
 
 def send_command(handler, msg, reply_size=1, reply_type='B'):
-    return from_bytes(send_command_raw(handler, msg, reply_size), reply_type)
+    global server
+    if server is not None:
+        return from_bytes(send_command_raw(handler, msg, reply_size), reply_type)
 
 def send_command_async(handler, msg):
-    server.send_request(handler, 0, msg)
+    global server
+    if server is not None:
+        server.send_request(handler, 0, msg)
 
 def connect(server_ip, server_port):
     global server, client_id

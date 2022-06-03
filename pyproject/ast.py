@@ -18,6 +18,7 @@ class ASTNode(object):
         from pyproject.array import ndarray
         if self.opcode == 0:
             cmd = to_bytes(self.opcode, 'L')
+            cmd += to_bytes(False, '?')
             cmd += to_bytes(self.operands[0].name, 'L')
             return cmd
         cmd = to_bytes(self.opcode, 'L') + to_bytes(self.name, 'L')
@@ -28,16 +29,19 @@ class ASTNode(object):
                 save_op = True if c_long.from_address(id(op)).value - 2 > 0 else False
                 opcmd = op.command_buffer.get_command(validated_arrays,
                                                       save=save_op)
-                if save_op:
+                if not op.valid and save_op:
                     validated_arrays[op.name] = op
                 cmd += to_bytes(len(opcmd), 'I')
                 cmd += opcmd
             elif isinstance(op, float) or isinstance(op, int):
-                cmd += to_bytes(8, 'I')
-                cmd += to_bytes(op, 'd')
+                opcmd = to_bytes(0, 'L')
+                opcmd += to_bytes(True, '?')
+                opcmd += to_bytes(op, 'd')
+                cmd += to_bytes(len(opcmd), 'I')
+                cmd += opcmd
         return cmd
 
-    def plot_graph(self, G=None, node_map={}, next_id=0, parent=None):
+    def plot_graph(self, G=None, node_map={}, color_map={}, next_id=0, parent=None):
         from pyproject.array import ndarray
         if G is None:
             G = nx.Graph()
@@ -49,19 +53,24 @@ class ASTNode(object):
             next_id += 1
             if not self.operands[0].valid:
                 next_id = self.operands[0].command_buffer.plot_graph(
-                    G, node_map, next_id, next_id - 1)
+                    G, node_map, color_map, next_id, next_id - 1)
             return next_id
         opnode = next_id
         G.add_node(next_id)
         if parent is not None:
             G.add_edge(parent, next_id)
         node_map[next_id] = INV_OPCODES.get(self.opcode, '?')
+        if parent is None:
+            color_map[next_id] = 1
         next_id += 1
         for op in self.operands:
             # an operand can also be a double
             if isinstance(op, ndarray):
+                save_op = True if c_long.from_address(id(op)).value - 2 > 0 else False
+                if not op.valid and save_op:
+                    color_map[next_id] = 1
                 next_id = op.command_buffer.plot_graph(
-                    G, node_map, next_id, opnode)
+                    G, node_map, color_map, next_id, opnode)
             elif isinstance(op, float) or isinstance(op, int):
                 G.add_node(next_id)
                 G.add_edge(opnode, next_id)
@@ -69,8 +78,13 @@ class ASTNode(object):
                 next_id += 1
         if parent is None:
             pos = graphviz_layout(G, prog="dot")
-            nx.draw(G, pos, labels=node_map)
+            color_map_list = []
+            for node in G:
+                if node in color_map:
+                    color_map_list.append('tab:red')
+                else:
+                    color_map_list.append('tab:blue')
+            nx.draw(G, pos, labels=node_map, node_color=color_map_list)
             plt.show()
         return next_id
-
 

@@ -1,5 +1,6 @@
 #include <aum/aum.hpp>
 #include <vector>
+#include <cstring>
 
 
 template<class T>
@@ -22,9 +23,7 @@ enum class operation : uint64_t
     matmul = 5,
     copy = 6,
     axpy = 7,
-    axpy_multiplier = 8,
-    mul_scalar = 9,
-    div_scalar = 10
+    axpy_multiplier = 8
 };
 
 
@@ -32,6 +31,7 @@ class astnode
 {
 public:
     bool store;
+    bool is_scalar;
     uint64_t name;
     operation oper;
     std::vector<astnode*> operands;
@@ -49,10 +49,22 @@ astnode* decode(char* cmd)
     uint64_t opcode = extract<uint64_t>(cmd);
     astnode* node = new astnode;
     node->oper = lookup_operation(opcode);
-    node->name = extract<uint64_t>(cmd);
     if (opcode == 0)
+    {
+        node->is_scalar = extract<bool>(cmd);
+        // if leaf is a scalar
+        if (node->is_scalar)
+        {
+            double value = extract<double>(cmd);
+            memcpy(&(node->name), &value, sizeof(double));
+        }
+        else
+            node->name = extract<uint64_t>(cmd);
         return node;
+    }
 
+    node->is_scalar = false;
+    node->name = extract<uint64_t>(cmd);
     node->store = extract<bool>(cmd);
     uint8_t num_operands = extract<uint8_t>(cmd);
     for (uint8_t i = 0; i < num_operands; i++)

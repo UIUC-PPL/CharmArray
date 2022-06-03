@@ -8,7 +8,7 @@
 
 
 using aum_name_t = uint64_t;
-using aum_array_t = std::variant<aum::scalar, aum::vector, aum::matrix>;
+using aum_array_t = std::variant<aum::scalar, aum::vector, aum::matrix, double>;
 std::unordered_map<aum_name_t, aum_array_t> symbol_table;
 std::stack<uint8_t> client_ids;
 
@@ -231,7 +231,10 @@ aum_array_t calculate(astnode* node, std::vector<uint64_t> &metadata)
     switch (node->oper)
     {
         case operation::noop: {
-            return Server::lookup(node->name);
+            if (node->is_scalar)
+                return static_cast<double>(node->name);
+            else
+                return Server::lookup(node->name);
         }
         case operation::add: {
             aum_array_t s1 = calculate(node->operands[0], metadata);
@@ -242,7 +245,7 @@ aum_array_t calculate(astnode* node, std::vector<uint64_t> &metadata)
                 [&](auto& x, auto& y) {
                     using T = std::decay_t<decltype(x)>;
                     using V = std::decay_t<decltype(y)>;
-                    if constexpr(std::is_same_v<T, V>)
+                    if constexpr(std::is_same_v<T, V> && !std::is_same_v<T, double>)
                     {
                         if (!node->operands[0]->store)
                             res = x.add_inplace(y);
@@ -271,7 +274,7 @@ aum_array_t calculate(astnode* node, std::vector<uint64_t> &metadata)
                 [&](auto& x, auto& y) {
                     using T = std::decay_t<decltype(x)>;
                     using V = std::decay_t<decltype(y)>;
-                    if constexpr(std::is_same_v<T, V>)
+                    if constexpr(std::is_same_v<T, V> && !std::is_same_v<T, double>)
                     {
                         if (!node->operands[0]->store)
                             res = x.sub_inplace_1(y);
@@ -279,6 +282,70 @@ aum_array_t calculate(astnode* node, std::vector<uint64_t> &metadata)
                             res = y.sub_inplace_2(x);
                         else
                             res = x - y;
+                    }
+                    else
+                        CmiAbort("Operation not permitted");
+                }, s1, s2);
+
+            if (node->store)
+            {
+                Server::insert(node->name, res);
+                extract_metadata(node->name, res, metadata);
+            }
+            return res;
+        }
+        case operation::mul: {
+            aum_array_t s1 = calculate(node->operands[0], metadata);
+            aum_array_t s2 = calculate(node->operands[1], metadata);
+            aum_array_t res;
+
+            std::visit(
+                [&](auto& x, auto& y) {
+                    using T = std::decay_t<decltype(x)>;
+                    using V = std::decay_t<decltype(y)>;
+                    if constexpr(std::is_same_v<T, aum::scalar> || 
+                            std::is_same_v<T, double>)
+                    {
+                        // FIXME implement inplace multiply
+                        // if (!node->operands[1]->store)
+                        //     res = y.mul_inplace(x);
+                        // else
+                        res = x * y;
+                    }
+                    else if constexpr(std::is_same_v<V, aum::scalar> || 
+                            std::is_same_v<V, double>)
+                    {
+                        // if (!node->operands[0]->store)
+                        //     res = x.mul_inplace(y);
+                        // else
+                        res = y * x;
+                    }
+                    else
+                        CmiAbort("Operation not permitted");
+                }, s1, s2);
+
+            if (node->store)
+            {
+                Server::insert(node->name, res);
+                extract_metadata(node->name, res, metadata);
+            }
+            return res;
+        }
+        case operation::div: {
+            aum_array_t s1 = calculate(node->operands[0], metadata);
+            aum_array_t s2 = calculate(node->operands[1], metadata);
+            aum_array_t res;
+
+            std::visit(
+                [&](auto& x, auto& y) {
+                    using T = std::decay_t<decltype(x)>;
+                    using V = std::decay_t<decltype(y)>;
+                    if constexpr((std::is_same_v<T, aum::scalar> || 
+                            std::is_same_v<T, double>) && 
+                            (std::is_same_v<V, aum::scalar> || 
+                            std::is_same_v<V, double>))
+                    {
+                        res = x / y;
                     }
                     else
                         CmiAbort("Operation not permitted");
