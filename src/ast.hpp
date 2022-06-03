@@ -32,6 +32,8 @@ class astnode
 public:
     bool store;
     bool is_scalar;
+    // FIXME double scalars fit into name, but should probably
+    // handle this better
     uint64_t name;
     operation oper;
     std::vector<astnode*> operands;

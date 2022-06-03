@@ -26,13 +26,20 @@ class ASTNode(object):
         for op in self.operands:
             # an operand can also be a double
             if isinstance(op, ndarray):
-                save_op = True if c_long.from_address(id(op)).value - 2 > 0 else False
-                opcmd = op.command_buffer.get_command(validated_arrays,
-                                                      save=save_op)
-                if not op.valid and save_op:
-                    validated_arrays[op.name] = op
-                cmd += to_bytes(len(opcmd), 'I')
-                cmd += opcmd
+                if op.name in validated_arrays:
+                    opcmd = to_bytes(0, 'L')
+                    opcmd += to_bytes(False, '?')
+                    opcmd += to_bytes(op.name, 'L')
+                    cmd += to_bytes(len(opcmd), 'I')
+                    cmd += opcmd
+                else:
+                    save_op = True if c_long.from_address(id(op)).value - 2 > 0 else False
+                    opcmd = op.command_buffer.get_command(validated_arrays,
+                                                          save=save_op)
+                    if not op.valid and save_op:
+                        validated_arrays[op.name] = op
+                    cmd += to_bytes(len(opcmd), 'I')
+                    cmd += opcmd
             elif isinstance(op, float) or isinstance(op, int):
                 opcmd = to_bytes(0, 'L')
                 opcmd += to_bytes(True, '?')
@@ -41,7 +48,8 @@ class ASTNode(object):
                 cmd += opcmd
         return cmd
 
-    def plot_graph(self, G=None, node_map={}, color_map={}, next_id=0, parent=None):
+    def plot_graph(self, validated_arrays={}, G=None, node_map={},
+                   color_map={}, next_id=0, parent=None):
         from pyproject.array import ndarray
         if G is None:
             G = nx.Graph()
@@ -53,24 +61,33 @@ class ASTNode(object):
             next_id += 1
             if not self.operands[0].valid:
                 next_id = self.operands[0].command_buffer.plot_graph(
-                    G, node_map, color_map, next_id, next_id - 1)
+                    validated_arrays, G, node_map, color_map, next_id,
+                    next_id - 1)
             return next_id
         opnode = next_id
         G.add_node(next_id)
         if parent is not None:
             G.add_edge(parent, next_id)
-        node_map[next_id] = INV_OPCODES.get(self.opcode, '?')
+        node_map[next_id] = INV_OPCODES.get(self.opcode, '?') + (': a%i' % self.name)
         if parent is None:
-            color_map[next_id] = 1
+            color_map[next_id] = 'tab:red'
         next_id += 1
         for op in self.operands:
             # an operand can also be a double
             if isinstance(op, ndarray):
-                save_op = True if c_long.from_address(id(op)).value - 2 > 0 else False
-                if not op.valid and save_op:
-                    color_map[next_id] = 1
-                next_id = op.command_buffer.plot_graph(
-                    G, node_map, color_map, next_id, opnode)
+                if op.name in validated_arrays:
+                    G.add_node(next_id)
+                    G.add_edge(opnode, next_id)
+                    node_map[next_id] = 'a' + str(op.name)
+                    color_map[next_id] = 'tab:green'
+                    next_id += 1
+                else:
+                    save_op = True if c_long.from_address(id(op)).value - 2 > 0 else False
+                    if not op.valid and save_op:
+                        color_map[next_id] = 'tab:red'
+                        validated_arrays[op.name] = op
+                    next_id = op.command_buffer.plot_graph(
+                        validated_arrays, G, node_map, color_map, next_id, opnode)
             elif isinstance(op, float) or isinstance(op, int):
                 G.add_node(next_id)
                 G.add_edge(opnode, next_id)
@@ -78,13 +95,9 @@ class ASTNode(object):
                 next_id += 1
         if parent is None:
             pos = graphviz_layout(G, prog="dot")
-            color_map_list = []
-            for node in G:
-                if node in color_map:
-                    color_map_list.append('tab:red')
-                else:
-                    color_map_list.append('tab:blue')
-            nx.draw(G, pos, labels=node_map, node_color=color_map_list)
+            color_map_list = [color_map.get(node, 'tab:blue') for node in G]
+            nx.draw(G, pos, labels=node_map, node_color=color_map_list,
+                    node_size=600, font_size=10)
             plt.show()
         return next_id
 

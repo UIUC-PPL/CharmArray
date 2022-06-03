@@ -219,9 +219,7 @@ void extract_metadata(aum_name_t name, aum_array_t &res, std::vector<uint64_t> &
             }
             else if constexpr (std::is_same_v<T, aum::vector>)
                 metadata.push_back(x.size());
-            else if constexpr (std::is_same_v<T, aum::scalar>)
-                metadata.push_back(1);
-            else
+            else if constexpr (!std::is_same_v<T, aum::scalar>)
                 CmiAbort("Array type not recognized");
         }, res);
 }
@@ -232,7 +230,7 @@ aum_array_t calculate(astnode* node, std::vector<uint64_t> &metadata)
     {
         case operation::noop: {
             if (node->is_scalar)
-                return static_cast<double>(node->name);
+                return *reinterpret_cast<double*>(&(node->name));
             else
                 return Server::lookup(node->name);
         }
@@ -350,6 +348,112 @@ aum_array_t calculate(astnode* node, std::vector<uint64_t> &metadata)
                     else
                         CmiAbort("Operation not permitted");
                 }, s1, s2);
+
+            if (node->store)
+            {
+                Server::insert(node->name, res);
+                extract_metadata(node->name, res, metadata);
+            }
+            return res;
+        }
+        case operation::matmul: {
+            aum_array_t s1 = calculate(node->operands[0], metadata);
+            aum_array_t s2 = calculate(node->operands[1], metadata);
+            aum_array_t res;
+
+            std::visit(
+                [&](auto& x, auto& y) {
+                    using T = std::decay_t<decltype(x)>;
+                    using V = std::decay_t<decltype(y)>;
+                    if constexpr(std::is_same_v<T, aum::matrix> && 
+                            std::is_same_v<V, aum::matrix>)
+                        CmiAbort("Matrix multiplication not yet implemented");
+                    else if constexpr((std::is_same_v<T, aum::matrix> || 
+                                    std::is_same_v<T, aum::vector>) && 
+                                std::is_same_v<V, aum::vector>)
+                    {
+                        // TODO implement inplace dot
+                        res = aum::dot(x, y);
+                    }
+                    else
+                        CmiAbort("Operation not permitted");
+                }, s1, s2);
+
+            if (node->store)
+            {
+                Server::insert(node->name, res);
+                extract_metadata(node->name, res, metadata);
+            }
+            return res;
+        }
+        case operation::copy: {
+            aum_array_t s1 = calculate(node->operands[0], metadata);
+            aum_array_t res;
+
+            std::visit(
+                [&](auto& x) {
+                    using T = std::decay_t<decltype(x)>;
+                    if constexpr(std::is_same_v<T, aum::vector> || 
+                            std::is_same_v<T, aum::scalar>)
+                        res = aum::copy(x);
+                    else
+                        CmiAbort("Matrix copy not implemented");
+                }, s1);
+
+            if (node->store)
+            {
+                Server::insert(node->name, res);
+                extract_metadata(node->name, res, metadata);
+            }
+            return res;
+        }
+        case operation::axpy: {
+            aum_array_t s1 = calculate(node->operands[0], metadata);
+            aum_array_t s2 = calculate(node->operands[1], metadata);
+            aum_array_t s3 = calculate(node->operands[2], metadata);
+            aum_array_t res;
+
+            std::visit(
+                [&](auto& a, auto& x, auto& y) {
+                    using S = std::decay_t<decltype(a)>;
+                    using T = std::decay_t<decltype(x)>;
+                    using V = std::decay_t<decltype(y)>;
+                    if constexpr(std::is_same_v<S, aum::scalar> &&
+                                std::is_same_v<T, aum::vector> &&
+                                std::is_same_v<V, aum::vector>)
+                        res = aum::blas::axpy(a, x, y);
+                    else
+                        CmiAbort("Operation not permitted");
+                }, s1, s2, s3);
+
+            if (node->store)
+            {
+                Server::insert(node->name, res);
+                extract_metadata(node->name, res, metadata);
+            }
+            return res;
+        }
+        case operation::axpy_multiplier: {
+            aum_array_t s1 = calculate(node->operands[0], metadata);
+            aum_array_t s2 = calculate(node->operands[1], metadata);
+            aum_array_t s3 = calculate(node->operands[2], metadata);
+            aum_array_t multiplier = calculate(node->operands[3], metadata);
+            aum_array_t res;
+
+            std::visit(
+                [&](auto& multiplier, auto& a, auto& x, auto& y) {
+                    using S = std::decay_t<decltype(a)>;
+                    using T = std::decay_t<decltype(x)>;
+                    using V = std::decay_t<decltype(y)>;
+                    using M = std::decay_t<decltype(multiplier)>;
+                    if constexpr(std::is_same_v<M, double> &&
+                                std::is_same_v<S, aum::scalar> &&
+                                std::is_same_v<T, aum::vector> &&
+                                std::is_same_v<V, aum::vector>)
+                        res = aum::blas::axpy(multiplier, a, x, y);
+                    else
+                        CmiAbort("Operation not permitted");
+                }, multiplier, s1, s2, s3);
 
             if (node->store)
             {
