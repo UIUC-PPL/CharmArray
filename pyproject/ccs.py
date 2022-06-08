@@ -3,6 +3,7 @@ import atexit
 from pyccs import Server
 from pyproject import array
 
+debug = False
 server = None
 client_id = 0
 next_name = 0
@@ -11,6 +12,18 @@ OPCODES = {'+': 1, '-': 2, '*': 3 ,'/': 4, '@': 5, 'copy': 6, 'axpy': 7,
            'axpy_multiplier': 8}
 
 INV_OPCODES = {v: k for k, v in OPCODES.items()}
+
+def enable_debug():
+    global debug
+    debug = True
+
+def disable_debug():
+    global debug
+    debug = False
+
+def is_debug():
+    global debug
+    return debug
 
 def get_name():
     global next_name
@@ -40,18 +53,19 @@ def send_command_async(handler, msg):
         server.send_request(handler, 0, msg)
 
 def connect(server_ip, server_port):
-    global server, client_id
-    server = Server(server_ip, server_port)
-    server.connect()
-    client_id = send_command(Handlers.connection_handler, "")
-    atexit.register(disconnect)
+    global server, client_id, debug
+    if not debug:
+        server = Server(server_ip, server_port)
+        server.connect()
+        client_id = send_command(Handlers.connection_handler, "")
+        atexit.register(disconnect)
 
 def disconnect():
     global client_id
     cmd = to_bytes(client_id, 'B')
     send_command_async(Handlers.disconnection_handler, cmd)
 
-def get_creation_command(arr, name, buf=None):
+def get_creation_command(arr, name, shape, buf=None):
     """
     Generate array creation CCS command
     """
@@ -59,7 +73,7 @@ def get_creation_command(arr, name, buf=None):
     cmd += to_bytes(arr.ndim, 'I')
     cmd += to_bytes(buf is not None, '?')
     cmd += to_bytes(arr.init_value is not None, '?')
-    for s in arr.shape:
+    for s in shape:
         cmd += to_bytes(int(s), 'L')
     if buf is not None:
         cmd += buf

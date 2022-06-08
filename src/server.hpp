@@ -365,10 +365,20 @@ aum_array_t calculate(astnode* node, std::vector<uint64_t> &metadata)
                 [&](auto& x, auto& y) {
                     using T = std::decay_t<decltype(x)>;
                     using V = std::decay_t<decltype(y)>;
-                    if constexpr(std::is_same_v<T, aum::matrix> && 
+                    if constexpr (std::is_same_v<T, aum::matrix> && 
                             std::is_same_v<V, aum::matrix>)
                         CmiAbort("Matrix multiplication not yet implemented");
-                    else if constexpr((std::is_same_v<T, aum::matrix> || 
+                    else if constexpr (std::is_same_v<T, aum::vector> && 
+                            std::is_same_v<V, aum::vector>)
+                    {
+                        if (!node->operands[0]->store)
+                            res = aum::inplace_dot_1(x, y);
+                        else if (!node->operands[1]->store)
+                            res = aum::inplace_dot_2(x, y);
+                        else
+                            res = aum::dot(x, y);
+                    }
+                    else if constexpr ((std::is_same_v<T, aum::matrix> || 
                                     std::is_same_v<T, aum::vector>) && 
                                 std::is_same_v<V, aum::vector>)
                     {

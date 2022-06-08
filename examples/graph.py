@@ -1,6 +1,11 @@
 from pyproject.array import connect, ndarray
+from pyproject.ast import set_max_depth
+from pyproject.ccs import enable_debug
 import pyproject.linalg as lg
 import numpy as np
+
+#enable_debug()
+set_max_depth(100)
 
 def f():
     v = ndarray(1, 10, np.float64)
@@ -11,13 +16,10 @@ def f():
         y = v + b + w
         z = v - y
         w = 2 * (c - z) + b
-    w.command_buffer.plot_graph()
-    #print(w.shape)
-    #print(z.shape)
-    #print(y.shape)
+    w.evaluate()
 
 
 if __name__ == '__main__':
-    #connect("172.17.0.1", 10000)
+    connect("172.17.0.1", 10000)
     s = f()
 

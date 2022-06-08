@@ -1,14 +1,19 @@
 from pyproject.array import connect, ndarray
 import pyproject.linalg as lg
+from pyproject.ccs import enable_debug
 import numpy as np
 
+import time
+
+enable_debug()
+
 def solve(A, b):
-    x = ndarray(1, 100, np.float64)
+    x = ndarray(1, 1000, np.float64)
     r = b - A @ x
     p = r.copy()
     rsold = r @ r
 
-    for i in range(100):
+    for i in range(1000):
         Ap = A @ p
         alpha = rsold / (p @ Ap)
 
@@ -29,8 +34,11 @@ def solve(A, b):
 if __name__ == '__main__':
     connect("172.17.0.1", 10000)
 
-    A = ndarray(2, (100, 100), np.float64)
-    b = ndarray(1, 100, np.float64)
+    A = ndarray(2, (1000, 1000), np.float64, init_value=1.)
+    b = ndarray(1, 1000, np.float64, init_value=1.)
+
+    start = time.time()
     x = solve(A, b)
+    print("Execution time = %.6f" % (time.time() - start))
 
 

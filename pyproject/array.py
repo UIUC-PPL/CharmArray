@@ -1,15 +1,20 @@
 import sys
 import warnings
 import numpy as np
-from pyproject.ast import ASTNode
+from pyproject.ast import get_max_depth, ASTNode
 from pyproject.ccs import to_bytes, from_bytes, send_command_raw, send_command, \
     send_command_async, connect, get_creation_command, \
-    get_name, get_fetch_command, Handlers, OPCODES
+    get_name, get_fetch_command, Handlers, OPCODES, is_debug
 
 
 def create_ndarray(ndim, dtype, shape=None, name=None, command_buffer=None):
     return ndarray(ndim, dtype=dtype, shape=shape, name=name,
                    command_buffer=command_buffer)
+
+
+def from_numpy(nparr):
+    return ndarray(nparr.ndim, dtype=nparr.dtype, shape=nparr.shape,
+                   nparr=nparr)
 
 
 class ndarray:
@@ -47,13 +52,19 @@ class ndarray:
                     buf = nparr.tobytes()
                 else:
                     buf = None
-                cmd = get_creation_command(self, self.name, buf=buf)
+                cmd = get_creation_command(self, self.name, self._shape, buf=buf)
                 if not send_command(Handlers.creation_handler, cmd,
                                     reply_type='?'):
                     warnings.warn("Error creating array on server", RuntimeWarning)
                 self.command_buffer = ASTNode(self.name, 0, [self])
         else:
             self.name = name
+            max_depth = get_max_depth()
+            if self.command_buffer.depth > max_depth:
+                if is_debug():
+                    print("Maximum AST depth exceeded for %i, "
+                          "flushing buffer" % self.name)
+                self._flush_command_buffer()
 
     @property
     def shape(self):
@@ -69,7 +80,7 @@ class ndarray:
         return self.shape[0]
 
     def __str__(self):
-        pass
+        print(self.get())
 
     #def __repr__(self):
     #    #self._flush_command_buffer()
@@ -133,6 +144,9 @@ class ndarray:
     def _flush_command_buffer(self):
         # send the command to server
         # finally set command buffer to array name
+        debug = is_debug()
+        if debug:
+            self.command_buffer.plot_graph()
         if self.valid:
             return
         validated_arrays = {self.name : self}
@@ -140,18 +154,22 @@ class ndarray:
         reply_size = 0
         for name, arr in validated_arrays.items():
             reply_size += 8 + 8 * arr.ndim
-        metadata = send_command_raw(Handlers.operation_handler,
-                                    cmd, reply_size=reply_size)
-        # traverse metadata
-        offset = 0
-        for i in range(len(validated_arrays)):
-            name = from_bytes(metadata[offset : offset + 8], 'L')
-            offset += 8
-            arr = validated_arrays[name]
-            for d in range(arr.ndim):
-                arr._shape[d] = from_bytes(metadata[offset : offset + 8], 'L')
+        if not debug:
+            metadata = send_command_raw(Handlers.operation_handler,
+                                        cmd, reply_size=reply_size)
+            # traverse metadata
+            offset = 0
+            for i in range(len(validated_arrays)):
+                name = from_bytes(metadata[offset : offset + 8], 'L')
                 offset += 8
-            arr.validate()
+                arr = validated_arrays[name]
+                for d in range(arr.ndim):
+                    arr._shape[d] = from_bytes(metadata[offset : offset + 8], 'L')
+                    offset += 8
+                arr.validate()
+        else:
+            for name, arr in validated_arrays.items():
+                arr.validate()
         self.validate()
 
     def get(self):
@@ -179,5 +197,4 @@ class ndarray:
         cmd_buffer = ASTNode(res, OPCODES.get('copy'), [self])
         return create_ndarray(self.ndim, self.dtype,
                               name=res, command_buffer=cmd_buffer)
-
 
