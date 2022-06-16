@@ -1,21 +1,21 @@
-PyProject
-=========
+charmtiles
+==========
 
-PyProject is a python interface to a C++ distributed array library
+:code:`charmtiles` is a python interface to a C++ distributed array library
 implemented using Charm++ [#charm]_.
-PyProject uses a client-server model with a client-side python
+charmtiles uses a client-server model with a client-side python
 interface and a Charm++ server on the backend. The client and server
 are connected using CCS [#ccs]_.
 The server maintains a symbol table of distributed arrays which
 are then looked up for computation when a CCS message is
 received.
 
-:code:`pyproject.array`
+:code:`charmtiles.array`
 ----------------------
 
 .. highlight:: python
 
-:code:`pyproject.array.ndarray`, analogous to :code:`numpy.ndarray`, is a proxy
+:code:`charmtiles.array.ndarray`, analogous to :code:`numpy.ndarray`, is a proxy
 object that wraps the name of the corresponding array on the server.
 We use a lazy evaluation scheme for array computations. 
 The array operations incrementally build an AST which is stored in a buffer in the

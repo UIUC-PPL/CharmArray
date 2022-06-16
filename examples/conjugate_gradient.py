@@ -1,6 +1,6 @@
-from pyproject.array import connect, ndarray
-import pyproject.linalg as lg
-from pyproject.ccs import enable_debug
+from charmtiles.array import connect, ndarray
+import charmtiles.linalg as lg
+from charmtiles.ccs import enable_debug
 import numpy as np
 
 import time

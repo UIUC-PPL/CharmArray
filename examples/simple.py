@@ -1,5 +1,5 @@
-from pyproject.array import connect, ndarray
-import pyproject.linalg as lg
+from charmtiles.array import connect, ndarray
+import charmtiles.linalg as lg
 import numpy as np
 
 def f():

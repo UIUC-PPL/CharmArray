@@ -1,7 +1,7 @@
 import struct
 import atexit
 from pyccs import Server
-from pyproject import array
+from charmtiles import array
 
 debug = False
 server = None

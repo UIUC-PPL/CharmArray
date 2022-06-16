@@ -3,7 +3,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from ctypes import c_long
 from networkx.drawing.nx_pydot import graphviz_layout
-from pyproject.ccs import OPCODES, INV_OPCODES, to_bytes
+from charmtiles.ccs import OPCODES, INV_OPCODES, to_bytes
 
 
 max_depth = 10
@@ -21,7 +21,7 @@ def get_max_depth():
 
 class ASTNode(object):
     def __init__(self, name, opcode, operands):
-        from pyproject.array import ndarray
+        from charmtiles.array import ndarray
         # contains opcode, operands
         # operands are ndarrays
         self.name = name
@@ -34,7 +34,7 @@ class ASTNode(object):
                     self.depth = max(self.depth, 1 + op.command_buffer.depth)
 
     def get_command(self, validated_arrays, save=True):
-        from pyproject.array import ndarray
+        from charmtiles.array import ndarray
         if self.opcode == 0:
             cmd = to_bytes(self.opcode, 'L')
             cmd += to_bytes(False, '?')
@@ -70,7 +70,7 @@ class ASTNode(object):
 
     def plot_graph(self, validated_arrays={}, G=None, node_map={},
                    color_map={}, next_id=0, parent=None, save=True):
-        from pyproject.array import ndarray
+        from charmtiles.array import ndarray
         if G is None:
             G = nx.Graph()
         if self.opcode == 0:

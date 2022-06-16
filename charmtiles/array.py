@@ -1,8 +1,8 @@
 import sys
 import warnings
 import numpy as np
-from pyproject.ast import get_max_depth, ASTNode
-from pyproject.ccs import to_bytes, from_bytes, send_command_raw, send_command, \
+from charmtiles.ast import get_max_depth, ASTNode
+from charmtiles.ccs import to_bytes, from_bytes, send_command_raw, send_command, \
     send_command_async, connect, get_creation_command, \
     get_name, get_fetch_command, Handlers, OPCODES, is_debug
 

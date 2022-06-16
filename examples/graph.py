@@ -1,7 +1,7 @@
-from pyproject.array import connect, ndarray
-from pyproject.ast import set_max_depth
-from pyproject.ccs import enable_debug
-import pyproject.linalg as lg
+from charmtiles.array import connect, ndarray
+from charmtiles.ast import set_max_depth
+from charmtiles.ccs import enable_debug
+import charmtiles.linalg as lg
 import numpy as np
 
 #enable_debug()
