@@ -1,4 +1,4 @@
-#include <aum/aum.hpp>
+#include <charmtyles/charmtyles.hpp>
 #include "server.hpp"
 #include "converse.h"
 #include "conv-ccs.h"
@@ -13,6 +13,7 @@ public:
     {
         Server::initialize();
         register_handlers();
+        ct::init();
 #ifndef NDEBUG
         CkPrintf("Initialization done\n");
 #endif

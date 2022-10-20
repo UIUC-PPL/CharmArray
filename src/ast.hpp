@@ -1,4 +1,3 @@
-#include <aum/aum.hpp>
 #include <vector>
 #include <cstring>
 

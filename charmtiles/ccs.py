@@ -9,7 +9,7 @@ client_id = 0
 next_name = 0
 
 OPCODES = {'+': 1, '-': 2, '*': 3 ,'/': 4, '@': 5, 'copy': 6, 'axpy': 7,
-           'axpy_multiplier': 8}
+           'axpy_multiplier': 8, 'setitem': 9}
 
 INV_OPCODES = {v: k for k, v in OPCODES.items()}
 

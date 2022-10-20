@@ -1,6 +1,6 @@
 mainmodule server
 {
-    extern module libaum;
+    extern module libcharmtyles;
 
     mainchare Main
     {

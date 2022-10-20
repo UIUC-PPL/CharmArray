@@ -1,19 +1,21 @@
 from charmtiles.array import connect, ndarray
 import charmtiles.linalg as lg
 from charmtiles.ccs import enable_debug
+from charmtiles.ast import set_max_depth
 import numpy as np
 
 import time
 
-enable_debug()
+#enable_debug()
+set_max_depth(100)
 
 def solve(A, b):
-    x = ndarray(1, 1000, np.float64)
+    x = ndarray(1, 3000, np.float64)
     r = b - A @ x
     p = r.copy()
     rsold = r @ r
 
-    for i in range(1000):
+    for i in range(100):
         Ap = A @ p
         alpha = rsold / (p @ Ap)
 
@@ -22,9 +24,9 @@ def solve(A, b):
 
         rsnew = r @ r
 
-        if np.sqrt(rsnew.get()) < 1e-8:
-            print("Converged in %i iterations" % (i + 1))
-            break
+        #if np.sqrt(rsnew.get()) < 1e-8:
+        #    print("Converged in %i iterations" % (i + 1))
+        #    break
 
         p = lg.axpy(rsnew / rsold, p, r)
         rsold = rsnew
@@ -34,11 +36,10 @@ def solve(A, b):
 if __name__ == '__main__':
     connect("172.17.0.1", 10000)
 
-    A = ndarray(2, (1000, 1000), np.float64, init_value=1.)
-    b = ndarray(1, 1000, np.float64, init_value=1.)
+    A = ndarray(2, (3000, 3000), np.float64)
+    b = ndarray(1, 3000, np.float64)
 
     start = time.time()
     x = solve(A, b)
+    x.evaluate()
     print("Execution time = %.6f" % (time.time() - start))
-
-
