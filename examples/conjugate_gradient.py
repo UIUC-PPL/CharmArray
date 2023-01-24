@@ -1,6 +1,6 @@
 from charmtiles.array import connect, ndarray
 import charmtiles.linalg as lg
-from charmtiles.ccs import enable_debug
+from charmtiles.ccs import enable_debug, sync
 from charmtiles.ast import set_max_depth
 import numpy as np
 
@@ -9,8 +9,7 @@ import time
 #enable_debug()
 set_max_depth(100)
 
-def solve(A, b):
-    x = ndarray(1, 3000, np.float64)
+def solve(A, b, x):
     r = b - A @ x
     p = r.copy()
     rsold = r @ r
@@ -38,8 +37,12 @@ if __name__ == '__main__':
 
     A = ndarray(2, (3000, 3000), np.float64)
     b = ndarray(1, 3000, np.float64)
+    x = ndarray(1, 3000, np.float64)
+
+    #d = (b @ x).get()
 
     start = time.time()
-    x = solve(A, b)
+    x = solve(A, b, x)
     x.evaluate()
+    sync()
     print("Execution time = %.6f" % (time.time() - start))

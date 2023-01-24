@@ -4,7 +4,11 @@ import numpy as np
 from charmtiles.ast import get_max_depth, ASTNode
 from charmtiles.ccs import to_bytes, from_bytes, send_command_raw, send_command, \
     send_command_async, connect, get_creation_command, \
-    get_name, get_fetch_command, Handlers, OPCODES, is_debug
+    get_epoch, get_name, get_fetch_command, Handlers, OPCODES, is_debug
+
+
+deletion_buffer = b''
+deletion_buffer_size = 0
 
 
 def create_ndarray(ndim, dtype, shape=None, name=None, command_buffer=None):
@@ -35,11 +39,11 @@ class ndarray:
         self.command_buffer = command_buffer
         if isinstance(shape, np.ndarray) or isinstance(shape, list) or \
                 isinstance(shape, tuple):
-            self._shape = np.asarray(shape, dtype=np.int32)
+            self.shape = np.asarray(shape, dtype=np.int32)
         elif shape is not None:
-            self._shape = np.asarray([shape], dtype=np.int32)
+            self.shape = np.asarray([shape], dtype=np.int32)
         else:
-            self._shape = np.zeros(self.ndim, dtype=np.int32)
+            self.shape = np.zeros(self.ndim, dtype=np.int32)
         self.valid = False
         if command_buffer is None:
             self.valid = True
@@ -52,10 +56,8 @@ class ndarray:
                     buf = nparr.tobytes()
                 else:
                     buf = None
-                cmd = get_creation_command(self, self.name, self._shape, buf=buf)
-                if not send_command(Handlers.creation_handler, cmd,
-                                    reply_type='?'):
-                    warnings.warn("Error creating array on server", RuntimeWarning)
+                cmd = get_creation_command(self, self.name, self.shape, buf=buf)
+                send_command_async(Handlers.creation_handler, cmd)
                 self.command_buffer = ASTNode(self.name, 0, [self])
         else:
             self.name = name
@@ -66,15 +68,11 @@ class ndarray:
                           "flushing buffer" % self.name)
                 self._flush_command_buffer()
 
-    @property
-    def shape(self):
-        self._flush_command_buffer()
-        return self._shape
-
     def __del__(self):
+        global deletion_buffer, deletion_buffer_size
         if self.valid:
-            cmd = to_bytes(self.name, 'L')
-            send_command_async(Handlers.delete_handler, cmd)
+            deletion_buffer += to_bytes(self.name, 'L')
+            deletion_buffer_size += 1
 
     def __len__(self):
         return self.shape[0]
@@ -99,7 +97,7 @@ class ndarray:
     def __add__(self, other):
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('+'), [self, other])
-        return create_ndarray(self.ndim, self.dtype,
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
 
     def __radd__(self, other):
@@ -108,7 +106,7 @@ class ndarray:
     def __sub__(self, other):
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('-'), [self, other])
-        return create_ndarray(self.ndim, self.dtype,
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
 
     def __rsub__(self, other):
@@ -119,7 +117,7 @@ class ndarray:
             RuntimeError("Cannote multiply two arrays")
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('*'), [self, other])
-        return create_ndarray(self.ndim, self.dtype,
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
 
     def __rmul__(self, other):
@@ -130,26 +128,30 @@ class ndarray:
             RuntimeError("Cannote divide two arrays")
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('/'), [self, other])
-        return create_ndarray(self.ndim, self.dtype,
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
 
     def __matmul__(self, other):
         if self.ndim == 2 and other.ndim == 2:
             res_ndim = 2
+            shape = np.array([self.shape[0], other.shape[1]], dtype=np.int32)
         elif self.ndim == 2 and other.ndim == 1:
             res_ndim = 1
+            shape = np.array([self.shape[0]], dtype=np.int32)
         elif self.ndim == 1 and other.ndim == 1:
             res_ndim = 0
+            shape = np.array([1], dtype=np.int32)
         else:
             raise RuntimeError("Dimension mismatch")
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('@'), [self, other])
-        return create_ndarray(res_ndim, self.dtype,
+        return create_ndarray(res_ndim, self.dtype, shape=shape,
                               name=res, command_buffer=cmd_buffer)
 
     def _flush_command_buffer(self):
         # send the command to server
         # finally set command buffer to array name
+        global deletion_buffer, deletion_buffer_size
         debug = is_debug()
         if debug:
             self.command_buffer.plot_graph()
@@ -161,17 +163,13 @@ class ndarray:
         for name, arr in validated_arrays.items():
             reply_size += 8 + 8 * arr.ndim
         if not debug:
-            metadata = send_command_raw(Handlers.operation_handler,
-                                        cmd, reply_size=reply_size)
-            # traverse metadata
-            offset = 0
+            cmd = to_bytes(deletion_buffer_size, 'I') + deletion_buffer + cmd
+            cmd = to_bytes(get_epoch(), 'i') + to_bytes(len(cmd), 'I') + cmd
+            send_command_async(Handlers.operation_handler, cmd)
+            deletion_buffer = b''
+            deletion_buffer_size = 0
             for i in range(len(validated_arrays)):
-                name = from_bytes(metadata[offset : offset + 8], 'L')
-                offset += 8
                 arr = validated_arrays[name]
-                for d in range(arr.ndim):
-                    arr._shape[d] = from_bytes(metadata[offset : offset + 8], 'L')
-                    offset += 8
                 arr.validate()
         else:
             for name, arr in validated_arrays.items():

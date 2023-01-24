@@ -63,7 +63,6 @@ class ASTNode(object):
                 opcmd = to_bytes(0, 'L')
                 opcmd += to_bytes(True, '?')
                 opcmd += to_bytes(op, 'd')
-                #print(opcmd, len(opcmd), len(cmd))
                 cmd += to_bytes(len(opcmd), 'I')
                 cmd += opcmd
         return cmd

@@ -6,6 +6,8 @@
 #include <unordered_map>
 #include "ast.hpp"
 
+#include "server.decl.h"
+
 
 using ct_name_t = uint64_t;
 using ct_array_t = std::variant<ct::scalar, ct::vector, ct::matrix, double>;
@@ -13,8 +15,62 @@ std::unordered_map<ct_name_t, ct_array_t> symbol_table;
 std::stack<uint8_t> client_ids;
 
 
+CProxy_Main main_proxy;
+CProxy_Driver driver_proxy;
+
+
 ct_array_t calculate(astnode* node, std::vector<uint64_t> &metadata);
 
+
+enum class opkind : uint8_t
+{
+    creation = 0,
+    operation = 1,
+    fetch = 2,
+    deletion = 3,
+    disconnect = 4,
+    sync = 5
+};
+
+class Main : public CBase_Main
+{
+public:
+    Server server;
+    std::unordered_map<int, CcsDelayedReply> reply_buffer;
+
+    Main(CkArgMsg* msg);
+
+    void register_handlers();
+
+    void send_reply(int epoch, int size, char* msg);
+
+    CcsDelayedReply& get_reply(int epoch);
+};
+
+class Driver : public CBase_Driver
+{
+private:
+    int EPOCH;
+
+public:
+    Driver_SDAG_CODE
+
+    Driver();
+
+    void execute_command(int epoch, uint8_t kind, int size, char* cmd);
+
+    void execute_operation(int epoch, int size, char* cmd);
+
+    void execute_creation(int epoch, int size, char* cmd);
+
+    void execute_delete(int epoch, int size, char* cmd);
+
+    void execute_fetch(int epoch, int size, char* cmd);
+
+    void execute_disconnect(int epoch, int size, char* cmd);
+
+    void execute_sync(int epoch, int size, char* cmd);
+};
 
 class Server
 {
@@ -68,120 +124,40 @@ public:
 
     static void operation_handler(char* msg)
     {
+        CkPrintf("Received operation\n");
         char* cmd = msg + CmiMsgHeaderSizeBytes;
-        astnode* head = decode(cmd);
-        std::vector<uint64_t> metadata;
-        calculate(head, metadata);
-        delete_ast(head);
-        CcsSendReply(sizeof(uint64_t) * metadata.size(), (void*) &metadata[0]);
+        int epoch = extract<int>(cmd);
+        uint32_t size = extract<uint32_t>(cmd);
+        driver_proxy.receive_command(epoch, (uint8_t) opkind::operation, size, cmd);
     }
 
     static void creation_handler(char* msg)
     {
-        /* First 32 bits are number of dimensions
-         * Each of the next 64 bits is the size of the array
-         * in each dimension
-         */
-        // FIXME need a field for dtype
-        try
-        {
-            char* cmd = msg + CmiMsgHeaderSizeBytes;
-            ct_name_t res_name = extract<ct_name_t>(cmd);
-            uint32_t ndim = extract<uint32_t>(cmd);
-            bool has_buf = extract<bool>(cmd);
-            bool has_init = extract<bool>(cmd);
-            switch(ndim)
-            {
-                case 0: {
-                    // create scalar
-                    CmiAbort("Not implemented");
-                }
-                case 1: {
-                    // create vector
-                    uint64_t size = extract<uint64_t>(cmd);
-                    ct_array_t res;
-                    if (has_buf)
-                    {
-                        //double* init_buf = (double*) cmd;
-                        //res = ct::vector(size, init_buf);
-                    }
-                    else if (has_init)
-                    {
-                        double init_value = extract<double>(cmd);
-                        res = ct::vector(size, init_value);
-                    }
-                    else
-                    {
-                        res = ct::vector(size);
-                    }
-                    insert(res_name, res);
-                    break;
-                }
-                case 2: {
-                    // create matrix
-                    uint64_t size1 = extract<uint64_t>(cmd);
-                    uint64_t size2 = extract<uint64_t>(cmd);
-                    ct_array_t res;
-                    if (has_buf)
-                    {
-                        //double* init_buf = (double*) cmd;
-                        //res = ct::matrix(size1, size2, init_buf);
-                    }
-                    else if (has_init)
-                    {
-                        double init_value = extract<double>(cmd);
-                        res = ct::matrix(size1, size2, init_value);
-                    }
-                    else
-                    {
-                        res = ct::matrix(size1, size2);
-                    }
-                    insert(res_name, res);
-                    break;
-                }
-                default: {
-                    // FIXME is this correctly caught?
-                    CmiAbort("Greater than 2 dimensions not supported");
-                }
-            }
-            
-            bool status = true;
-            CcsSendReply(1, (void*) &status);
-        }
-        catch(...)
-        {
-            bool status = false;
-            CcsSendReply(1, (void*) &status);
-        }
-    }
-
-    static void fetch_handler(char* msg)
-    {
+        CkPrintf("Received creation\n");
         char* cmd = msg + CmiMsgHeaderSizeBytes;
-        ct_name_t name = extract<ct_name_t>(cmd);
-        ct_array_t& arr = lookup(name);
-        void* reply = nullptr;
-        int reply_size = 0;
-        std::visit(
-            [&](auto& x) {
-                using T = std::decay_t<decltype(x)>;
-                if constexpr(std::is_same_v<T, ct::scalar>)
-                {
-                    double value = x.get();
-                    reply = (void*) &value;
-                    reply_size += 8;
-                    CcsSendReply(reply_size, reply);
-                }    
-                else
-                    CmiAbort("Operation not implemented1");
-            }, arr);
+        int epoch = extract<int>(cmd);
+        uint32_t size = extract<uint32_t>(cmd);
+        driver_proxy.receive_command(epoch, (uint8_t) opkind::creation, size, cmd);
     }
 
     static void delete_handler(char* msg)
     {
         char* cmd = msg + CmiMsgHeaderSizeBytes;
-        ct_name_t name = extract<ct_name_t>(cmd);
-        remove(name);
+        int epoch = extract<int>(cmd);
+        uint32_t size = extract<uint32_t>(cmd);
+        driver_proxy.receive_command(epoch, (uint8_t) opkind::deletion, size, cmd);
+    }
+
+    static void fetch_handler(char* msg)
+    {
+        char* cmd = msg + CmiMsgHeaderSizeBytes;
+        int epoch = extract<int>(cmd);
+        uint32_t size = extract<uint32_t>(cmd);
+        Main* main_obj = main_proxy.ckLocal();
+        if (main_obj == NULL)
+            CkAbort("Local branch of main not found!\n");
+        main_obj->reply_buffer[epoch] = CcsDelayReply();
+        driver_proxy.receive_command(epoch, (uint8_t) opkind::fetch, size, cmd);
     }
 
     static void connection_handler(char* msg)
@@ -193,11 +169,18 @@ public:
     static void disconnection_handler(char* msg)
     {
         char* cmd = msg + CmiMsgHeaderSizeBytes;
-        uint8_t client_id = extract<uint8_t>(cmd);
-        client_ids.push(client_id);
-#ifndef NDEBUG
-        CkPrintf("Disconnected %" PRIu8 " from server\n", client_id);
-#endif
+        int epoch = extract<int>(cmd);
+        uint32_t size = extract<uint32_t>(cmd);
+        driver_proxy.receive_command(epoch, (uint8_t) opkind::disconnect, size, cmd);
+    }
+
+    static void sync_handler(char* msg)
+    {
+        char* cmd = msg + CmiMsgHeaderSizeBytes;
+        int epoch = extract<int>(cmd);
+        uint32_t size = extract<uint32_t>(cmd);
+        main_proxy.ckLocal()->reply_buffer[epoch] = CcsDelayReply();
+        driver_proxy.receive_command(epoch, (uint8_t) opkind::sync, size, cmd);
     }
 
     inline static void exit_server(char* msg)
@@ -205,22 +188,6 @@ public:
         CkExit();
     }
 };
-
-void extract_metadata(ct_name_t name, ct_array_t &res, std::vector<uint64_t> &metadata)
-{
-    metadata.push_back(name);
-    std::visit(
-        [&](auto& x) {
-            using T = std::decay_t<decltype(x)>;
-            if constexpr (std::is_same_v<T, ct::matrix>)
-            {
-                metadata.push_back(x.rows());
-                metadata.push_back(x.cols());
-            }
-            else if constexpr (std::is_same_v<T, ct::vector>)
-                metadata.push_back(x.size());
-        }, res);
-}
 
 ct_array_t calculate(astnode* node, std::vector<uint64_t> &metadata)
 {
@@ -241,7 +208,8 @@ ct_array_t calculate(astnode* node, std::vector<uint64_t> &metadata)
                 [&](auto& x, auto& y) {
                     using T = std::decay_t<decltype(x)>;
                     using V = std::decay_t<decltype(y)>;
-                    if constexpr(std::is_same_v<T, V> && !std::is_same_v<T, double> && !std::is_same_v<T, ct::scalar>)
+                    if constexpr(std::is_same_v<T, V> && !std::is_same_v<T, double> &&
+                            !std::is_same_v<T, ct::scalar>)
                         res = x + y;
                     else if constexpr(std::is_same_v<T, V> && std::is_same_v<T, ct::scalar>)
                         res = x.get() + y.get();
@@ -250,10 +218,7 @@ ct_array_t calculate(astnode* node, std::vector<uint64_t> &metadata)
                 }, s1, s2);
 
             if (node->store)
-            {
                 Server::insert(node->name, res);
-                extract_metadata(node->name, res, metadata);
-            }
             return res;
         }
         case operation::sub: {
@@ -278,7 +243,6 @@ ct_array_t calculate(astnode* node, std::vector<uint64_t> &metadata)
             if (node->store)
             {
                 Server::insert(node->name, res);
-                extract_metadata(node->name, res, metadata);
             }
             return res;
         }
@@ -306,7 +270,6 @@ ct_array_t calculate(astnode* node, std::vector<uint64_t> &metadata)
         //     if (node->store)
         //     {
         //         Server::insert(node->name, res);
-        //         extract_metadata(node->name, res, metadata);
         //     }
         //     return res;
         // }
@@ -332,7 +295,6 @@ ct_array_t calculate(astnode* node, std::vector<uint64_t> &metadata)
             if (node->store)
             {
                 Server::insert(node->name, res);
-                extract_metadata(node->name, res, metadata);
             }
             return res;
         }
@@ -362,7 +324,6 @@ ct_array_t calculate(astnode* node, std::vector<uint64_t> &metadata)
             if (node->store)
             {
                 Server::insert(node->name, res);
-                extract_metadata(node->name, res, metadata);
             }
             return res;
         }
@@ -383,7 +344,6 @@ ct_array_t calculate(astnode* node, std::vector<uint64_t> &metadata)
             if (node->store)
             {
                 Server::insert(node->name, res);
-                extract_metadata(node->name, res, metadata);
             }
             return res;
         }
@@ -409,7 +369,6 @@ ct_array_t calculate(astnode* node, std::vector<uint64_t> &metadata)
             if (node->store)
             {
                 Server::insert(node->name, res);
-                extract_metadata(node->name, res, metadata);
             }
             return res;
         }
@@ -436,15 +395,13 @@ ct_array_t calculate(astnode* node, std::vector<uint64_t> &metadata)
                 }, multiplier, s1, s2, s3);
 
             if (node->store)
-            {
                 Server::insert(node->name, res);
-                extract_metadata(node->name, res, metadata);
-            }
             return res;
         }
         default: {
             CmiAbort("Operation not implemented8");
         }
     }
-}
+};
 
+#include "server.def.h"
