@@ -11,7 +11,7 @@ void operation_handler(char* msg)
     char* cmd = msg + CmiMsgHeaderSizeBytes;
     int epoch = extract<int>(cmd);
     uint32_t size = extract<uint32_t>(cmd);
-    driver_proxy.receive_command(epoch, (uint8_t) opkind::operation, size, cmd);
+    main_proxy.receive_command(epoch, (uint8_t) opkind::operation, size, cmd);
 }
 
 void creation_handler(char* msg)
@@ -21,7 +21,7 @@ void creation_handler(char* msg)
     if (epoch == 0)
         start_time = CkTimer();
     uint32_t size = extract<uint32_t>(cmd);
-    driver_proxy.receive_command(epoch, (uint8_t) opkind::creation, size, cmd);
+    main_proxy.receive_command(epoch, (uint8_t) opkind::creation, size, cmd);
 }
 
 void delete_handler(char* msg)
@@ -29,7 +29,7 @@ void delete_handler(char* msg)
     char* cmd = msg + CmiMsgHeaderSizeBytes;
     int epoch = extract<int>(cmd);
     uint32_t size = extract<uint32_t>(cmd);
-    driver_proxy.receive_command(epoch, (uint8_t) opkind::deletion, size, cmd);
+    main_proxy.receive_command(epoch, (uint8_t) opkind::deletion, size, cmd);
 }
 
 void fetch_handler(char* msg)
@@ -39,7 +39,7 @@ void fetch_handler(char* msg)
     uint32_t size = extract<uint32_t>(cmd);
     CkPrintf("Fetch at epoch %i\n", epoch);
     server.reply_buffer[epoch] = CcsDelayReply();
-    driver_proxy.receive_command(epoch, (uint8_t) opkind::fetch, size, cmd);
+    main_proxy.receive_command(epoch, (uint8_t) opkind::fetch, size, cmd);
 }
 
 void connection_handler(char* msg)
@@ -53,7 +53,7 @@ void disconnection_handler(char* msg)
     char* cmd = msg + CmiMsgHeaderSizeBytes;
     int epoch = extract<int>(cmd);
     uint32_t size = extract<uint32_t>(cmd);
-    driver_proxy.receive_command(epoch, (uint8_t) opkind::disconnect, size, cmd);
+    main_proxy.receive_command(epoch, (uint8_t) opkind::disconnect, size, cmd);
 }
 
 void sync_handler(char* msg)
@@ -62,7 +62,7 @@ void sync_handler(char* msg)
     int epoch = extract<int>(cmd);
     uint32_t size = extract<uint32_t>(cmd);
     server.reply_buffer[epoch] = CcsDelayReply();
-    driver_proxy.receive_command(epoch, (uint8_t) opkind::sync, size, cmd);
+    main_proxy.receive_command(epoch, (uint8_t) opkind::sync, size, cmd);
 }
 
 inline void exit_server(char* msg)
@@ -72,11 +72,13 @@ inline void exit_server(char* msg)
 
 Main::Main(CkArgMsg* msg) 
 {
+    EPOCH = 0;
     main_proxy = thisProxy;
     server = Server();
     Server::initialize();
     register_handlers();
-    driver_proxy = CProxy_Driver::ckNew();
+    ct::init();
+    thisProxy.start();
 #ifndef NDEBUG
     CkPrintf("Initialization done\n");
 #endif
@@ -103,14 +105,7 @@ void Main::send_reply(int epoch, int size, char* msg)
     server.reply_buffer.erase(epoch);
 }
 
-Driver::Driver()
-    : EPOCH(0)
-{
-    ct::init();
-    thisProxy.start();
-}
-
-void Driver::execute_operation(int epoch, int size, char* cmd)
+void Main::execute_operation(int epoch, int size, char* cmd)
 {
     // first delete arrays
     uint32_t num_deletions = extract<uint32_t>(cmd);
@@ -125,7 +120,7 @@ void Driver::execute_operation(int epoch, int size, char* cmd)
     delete_ast(head);
 }
 
-void Driver::execute_command(int epoch, uint8_t kind, int size, char* cmd)
+void Main::execute_command(int epoch, uint8_t kind, int size, char* cmd)
 {
     opkind kind_type = (opkind) kind;
     switch(kind_type)
@@ -157,7 +152,7 @@ void Driver::execute_command(int epoch, uint8_t kind, int size, char* cmd)
     }
 }
 
-void Driver::execute_creation(int epoch, int size, char* cmd)
+void Main::execute_creation(int epoch, int size, char* cmd)
 {
     /* First 32 bits are number of dimensions
      * Each of the next 64 bits is the size of the array
@@ -224,7 +219,7 @@ void Driver::execute_creation(int epoch, int size, char* cmd)
     }
 }
 
-void Driver::execute_fetch(int epoch, int size, char* cmd)
+void Main::execute_fetch(int epoch, int size, char* cmd)
 {
     ct_name_t name = extract<ct_name_t>(cmd);
     ct_array_t& arr = Server::lookup(name);
@@ -246,7 +241,7 @@ void Driver::execute_fetch(int epoch, int size, char* cmd)
         }, arr);
 }
 
-void Driver::execute_delete(int epoch, int size, char* cmd)
+void Main::execute_delete(int epoch, int size, char* cmd)
 {
     uint32_t num_deletions = extract<uint32_t>(cmd);
     for (int i = 0; i < num_deletions; i++)
@@ -256,7 +251,7 @@ void Driver::execute_delete(int epoch, int size, char* cmd)
     }
 }
 
-void Driver::execute_disconnect(int epoch, int size, char* cmd)
+void Main::execute_disconnect(int epoch, int size, char* cmd)
 {
     uint8_t client_id = extract<uint8_t>(cmd);
     client_ids.push(client_id);
@@ -265,9 +260,9 @@ void Driver::execute_disconnect(int epoch, int size, char* cmd)
 #endif
 }
 
-void Driver::execute_sync(int epoch, int size, char* cmd)
+void Main::execute_sync(int epoch, int size, char* cmd)
 {
     CkPrintf("Execution time = %f\n", CkTimer() - start_time);
     bool r = true;
-    main_proxy.send_reply(epoch, 1, (char*) &r);
+    send_reply(epoch, 1, (char*) &r);
 }

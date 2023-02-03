@@ -16,7 +16,6 @@ std::stack<uint8_t> client_ids;
 
 
 CProxy_Main main_proxy;
-CProxy_Driver driver_proxy;
 
 ct_array_t calculate(astnode* node, std::vector<uint64_t> &metadata);
 
@@ -34,24 +33,15 @@ enum class opkind : uint8_t
 class Main : public CBase_Main
 {
 public:
+    Main_SDAG_CODE
+
+    int EPOCH;
+
     Main(CkArgMsg* msg);
 
     void register_handlers();
 
     void send_reply(int epoch, int size, char* msg);
-
-    CcsDelayedReply& get_reply(int epoch);
-};
-
-class Driver : public CBase_Driver
-{
-private:
-    int EPOCH;
-
-public:
-    Driver_SDAG_CODE
-
-    Driver();
 
     void execute_command(int epoch, uint8_t kind, int size, char* cmd);
 
@@ -67,6 +57,7 @@ public:
 
     void execute_sync(int epoch, int size, char* cmd);
 };
+
 
 class Server
 {

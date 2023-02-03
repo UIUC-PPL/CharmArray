@@ -7,11 +7,6 @@ mainmodule server
         entry Main(CkArgMsg*);
 
         entry void send_reply(int epoch, int size, char msg[size]);
-    };
-
-    chare Driver
-    {
-        entry Driver();
 
         entry void receive_command(int epoch, uint8_t kind, uint32_t size, char cmd[size]);
 
