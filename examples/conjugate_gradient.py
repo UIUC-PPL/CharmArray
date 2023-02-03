@@ -35,9 +35,9 @@ def solve(A, b, x):
 if __name__ == '__main__':
     connect("172.17.0.1", 10000)
 
-    A = ndarray(2, (3000, 3000), np.float64)
-    b = ndarray(1, 3000, np.float64)
-    x = ndarray(1, 3000, np.float64)
+    A = ndarray(2, (1000, 1000), np.float64)
+    b = ndarray(1, 1000, np.float64)
+    x = ndarray(1, 1000, np.float64)
 
     #d = (b @ x).get()
 

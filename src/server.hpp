@@ -18,7 +18,6 @@ std::stack<uint8_t> client_ids;
 CProxy_Main main_proxy;
 CProxy_Driver driver_proxy;
 
-
 ct_array_t calculate(astnode* node, std::vector<uint64_t> &metadata);
 
 
@@ -35,9 +34,6 @@ enum class opkind : uint8_t
 class Main : public CBase_Main
 {
 public:
-    Server server;
-    std::unordered_map<int, CcsDelayedReply> reply_buffer;
-
     Main(CkArgMsg* msg);
 
     void register_handlers();
@@ -75,6 +71,8 @@ public:
 class Server
 {
 public:
+    std::unordered_map<int, CcsDelayedReply> reply_buffer;
+
     static void initialize()
     {
         for (int16_t i = 255; i >= 0; i--)
@@ -120,72 +118,6 @@ public:
             CmiAbort("Symbol %i not found", name);
         }
         return find->second;
-    }
-
-    static void operation_handler(char* msg)
-    {
-        CkPrintf("Received operation\n");
-        char* cmd = msg + CmiMsgHeaderSizeBytes;
-        int epoch = extract<int>(cmd);
-        uint32_t size = extract<uint32_t>(cmd);
-        driver_proxy.receive_command(epoch, (uint8_t) opkind::operation, size, cmd);
-    }
-
-    static void creation_handler(char* msg)
-    {
-        CkPrintf("Received creation\n");
-        char* cmd = msg + CmiMsgHeaderSizeBytes;
-        int epoch = extract<int>(cmd);
-        uint32_t size = extract<uint32_t>(cmd);
-        driver_proxy.receive_command(epoch, (uint8_t) opkind::creation, size, cmd);
-    }
-
-    static void delete_handler(char* msg)
-    {
-        char* cmd = msg + CmiMsgHeaderSizeBytes;
-        int epoch = extract<int>(cmd);
-        uint32_t size = extract<uint32_t>(cmd);
-        driver_proxy.receive_command(epoch, (uint8_t) opkind::deletion, size, cmd);
-    }
-
-    static void fetch_handler(char* msg)
-    {
-        char* cmd = msg + CmiMsgHeaderSizeBytes;
-        int epoch = extract<int>(cmd);
-        uint32_t size = extract<uint32_t>(cmd);
-        Main* main_obj = main_proxy.ckLocal();
-        if (main_obj == NULL)
-            CkAbort("Local branch of main not found!\n");
-        main_obj->reply_buffer[epoch] = CcsDelayReply();
-        driver_proxy.receive_command(epoch, (uint8_t) opkind::fetch, size, cmd);
-    }
-
-    static void connection_handler(char* msg)
-    {
-        uint8_t client_id = get_client_id();
-        CcsSendReply(1, (void*) &client_id);
-    }
-
-    static void disconnection_handler(char* msg)
-    {
-        char* cmd = msg + CmiMsgHeaderSizeBytes;
-        int epoch = extract<int>(cmd);
-        uint32_t size = extract<uint32_t>(cmd);
-        driver_proxy.receive_command(epoch, (uint8_t) opkind::disconnect, size, cmd);
-    }
-
-    static void sync_handler(char* msg)
-    {
-        char* cmd = msg + CmiMsgHeaderSizeBytes;
-        int epoch = extract<int>(cmd);
-        uint32_t size = extract<uint32_t>(cmd);
-        main_proxy.ckLocal()->reply_buffer[epoch] = CcsDelayReply();
-        driver_proxy.receive_command(epoch, (uint8_t) opkind::sync, size, cmd);
-    }
-
-    inline static void exit_server(char* msg)
-    {
-        CkExit();
     }
 };
 

@@ -3,6 +3,72 @@
 #include "converse.h"
 #include "conv-ccs.h"
 
+Server server;
+double start_time;
+
+void operation_handler(char* msg)
+{
+    char* cmd = msg + CmiMsgHeaderSizeBytes;
+    int epoch = extract<int>(cmd);
+    uint32_t size = extract<uint32_t>(cmd);
+    driver_proxy.receive_command(epoch, (uint8_t) opkind::operation, size, cmd);
+}
+
+void creation_handler(char* msg)
+{
+    char* cmd = msg + CmiMsgHeaderSizeBytes;
+    int epoch = extract<int>(cmd);
+    if (epoch == 0)
+        start_time = CkTimer();
+    uint32_t size = extract<uint32_t>(cmd);
+    driver_proxy.receive_command(epoch, (uint8_t) opkind::creation, size, cmd);
+}
+
+void delete_handler(char* msg)
+{
+    char* cmd = msg + CmiMsgHeaderSizeBytes;
+    int epoch = extract<int>(cmd);
+    uint32_t size = extract<uint32_t>(cmd);
+    driver_proxy.receive_command(epoch, (uint8_t) opkind::deletion, size, cmd);
+}
+
+void fetch_handler(char* msg)
+{
+    char* cmd = msg + CmiMsgHeaderSizeBytes;
+    int epoch = extract<int>(cmd);
+    uint32_t size = extract<uint32_t>(cmd);
+    CkPrintf("Fetch at epoch %i\n", epoch);
+    server.reply_buffer[epoch] = CcsDelayReply();
+    driver_proxy.receive_command(epoch, (uint8_t) opkind::fetch, size, cmd);
+}
+
+void connection_handler(char* msg)
+{
+    uint8_t client_id = Server::get_client_id();
+    CcsSendReply(1, (void*) &client_id);
+}
+
+void disconnection_handler(char* msg)
+{
+    char* cmd = msg + CmiMsgHeaderSizeBytes;
+    int epoch = extract<int>(cmd);
+    uint32_t size = extract<uint32_t>(cmd);
+    driver_proxy.receive_command(epoch, (uint8_t) opkind::disconnect, size, cmd);
+}
+
+void sync_handler(char* msg)
+{
+    char* cmd = msg + CmiMsgHeaderSizeBytes;
+    int epoch = extract<int>(cmd);
+    uint32_t size = extract<uint32_t>(cmd);
+    server.reply_buffer[epoch] = CcsDelayReply();
+    driver_proxy.receive_command(epoch, (uint8_t) opkind::sync, size, cmd);
+}
+
+inline void exit_server(char* msg)
+{
+    CkExit();
+}
 
 Main::Main(CkArgMsg* msg) 
 {
@@ -18,30 +84,23 @@ Main::Main(CkArgMsg* msg)
 
 void Main::register_handlers()
 {
-    CcsRegisterHandler("aum_connect", (CmiHandler) server.connection_handler);
-    CcsRegisterHandler("aum_disconnect", (CmiHandler) server.disconnection_handler);
-    CcsRegisterHandler("aum_operation", (CmiHandler) server.operation_handler);
-    CcsRegisterHandler("aum_creation", (CmiHandler) server.creation_handler);
-    CcsRegisterHandler("aum_fetch", (CmiHandler) server.fetch_handler);
-    CcsRegisterHandler("aum_delete", (CmiHandler) server.delete_handler);
-    CcsRegisterHandler("aum_sync", (CmiHandler) server.sync_handler);
-    CcsRegisterHandler("aum_exit", (CmiHandler) server.exit_server);
+    CcsRegisterHandler("aum_connect", (CmiHandler) connection_handler);
+    CcsRegisterHandler("aum_disconnect", (CmiHandler) disconnection_handler);
+    CcsRegisterHandler("aum_operation", (CmiHandler) operation_handler);
+    CcsRegisterHandler("aum_creation", (CmiHandler) creation_handler);
+    CcsRegisterHandler("aum_fetch", (CmiHandler) fetch_handler);
+    CcsRegisterHandler("aum_delete", (CmiHandler) delete_handler);
+    CcsRegisterHandler("aum_sync", (CmiHandler) sync_handler);
+    CcsRegisterHandler("aum_exit", (CmiHandler) exit_server);
 }
 
 void Main::send_reply(int epoch, int size, char* msg)
 {
-    auto reply = reply_buffer.find(epoch);
-    if (reply == reply_buffer.end())
+    auto reply = server.reply_buffer.find(epoch);
+    if (reply == server.reply_buffer.end())
         CkAbort("Reply without token\n");
     CcsSendDelayedReply(reply->second, size, msg);
-    reply_buffer.erase(epoch);
-}
-
-CcsDelayedReply& Main::get_reply(int epoch)
-{
-    CcsDelayedReply& reply = reply_buffer[epoch];
-    reply_buffer.erase(epoch);
-    return reply;
+    server.reply_buffer.erase(epoch);
 }
 
 Driver::Driver()
@@ -208,6 +267,7 @@ void Driver::execute_disconnect(int epoch, int size, char* cmd)
 
 void Driver::execute_sync(int epoch, int size, char* cmd)
 {
+    CkPrintf("Execution time = %f\n", CkTimer() - start_time);
     bool r = true;
     main_proxy.send_reply(epoch, 1, (char*) &r);
 }
