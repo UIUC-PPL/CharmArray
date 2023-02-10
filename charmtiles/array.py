@@ -62,7 +62,7 @@ class ndarray:
         else:
             self.name = name
             max_depth = get_max_depth()
-            if self.command_buffer.depth > max_depth:
+            if self.command_buffer.depth >= max_depth:
                 if is_debug():
                     print("Maximum AST depth exceeded for %i, "
                           "flushing buffer" % self.name)
@@ -125,7 +125,7 @@ class ndarray:
 
     def __truediv__(self, other):
         if self.ndim > 0 or other.ndim > 0:
-            RuntimeError("Cannote divide two arrays")
+            RuntimeError("Cannot divide two arrays")
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('/'), [self, other])
         return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
@@ -163,6 +163,7 @@ class ndarray:
         for name, arr in validated_arrays.items():
             reply_size += 8 + 8 * arr.ndim
         if not debug:
+            #print("Deletion size :", deletion_buffer_size)
             cmd = to_bytes(deletion_buffer_size, 'I') + deletion_buffer + cmd
             cmd = to_bytes(get_epoch(), 'i') + to_bytes(len(cmd), 'I') + cmd
             send_command_async(Handlers.operation_handler, cmd)

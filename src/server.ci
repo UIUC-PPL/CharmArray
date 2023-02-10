@@ -6,20 +6,6 @@ mainmodule server
     {
         entry Main(CkArgMsg*);
 
-        entry void send_reply(int epoch, int size, char msg[size]);
-
-        entry void receive_command(int epoch, uint8_t kind, uint32_t size, char cmd[size]);
-
-        entry void start()
-        {
-            while (EPOCH > -1)
-            {
-                when receive_command[EPOCH] (int epoch, uint8_t kind, uint32_t size, char cmd[size])
-                    serial {
-                        execute_command(epoch, kind, size, cmd);
-                        EPOCH++;
-                    }
-            }
-        };
+        entry void handle_command(int epoch, uint8_t kind, uint32_t size, char cmd[size]);
     };
 }

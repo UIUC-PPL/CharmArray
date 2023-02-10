@@ -7,7 +7,7 @@ import numpy as np
 import time
 
 #enable_debug()
-set_max_depth(100)
+set_max_depth(10)
 
 def solve(A, b, x):
     r = b - A @ x

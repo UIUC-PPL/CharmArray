@@ -11,7 +11,7 @@ void operation_handler(char* msg)
     char* cmd = msg + CmiMsgHeaderSizeBytes;
     int epoch = extract<int>(cmd);
     uint32_t size = extract<uint32_t>(cmd);
-    main_proxy.receive_command(epoch, (uint8_t) opkind::operation, size, cmd);
+    main_proxy.handle_command(epoch, (uint8_t) opkind::operation, size, cmd);
 }
 
 void creation_handler(char* msg)
@@ -21,7 +21,7 @@ void creation_handler(char* msg)
     if (epoch == 0)
         start_time = CkTimer();
     uint32_t size = extract<uint32_t>(cmd);
-    main_proxy.receive_command(epoch, (uint8_t) opkind::creation, size, cmd);
+    main_proxy.handle_command(epoch, (uint8_t) opkind::creation, size, cmd);
 }
 
 void delete_handler(char* msg)
@@ -29,7 +29,7 @@ void delete_handler(char* msg)
     char* cmd = msg + CmiMsgHeaderSizeBytes;
     int epoch = extract<int>(cmd);
     uint32_t size = extract<uint32_t>(cmd);
-    main_proxy.receive_command(epoch, (uint8_t) opkind::deletion, size, cmd);
+    main_proxy.handle_command(epoch, (uint8_t) opkind::deletion, size, cmd);
 }
 
 void fetch_handler(char* msg)
@@ -37,9 +37,9 @@ void fetch_handler(char* msg)
     char* cmd = msg + CmiMsgHeaderSizeBytes;
     int epoch = extract<int>(cmd);
     uint32_t size = extract<uint32_t>(cmd);
-    CkPrintf("Fetch at epoch %i\n", epoch);
+    //CkPrintf("Fetch at epoch %i\n", epoch);
     server.reply_buffer[epoch] = CcsDelayReply();
-    main_proxy.receive_command(epoch, (uint8_t) opkind::fetch, size, cmd);
+    main_proxy.handle_command(epoch, (uint8_t) opkind::fetch, size, cmd);
 }
 
 void connection_handler(char* msg)
@@ -53,16 +53,17 @@ void disconnection_handler(char* msg)
     char* cmd = msg + CmiMsgHeaderSizeBytes;
     int epoch = extract<int>(cmd);
     uint32_t size = extract<uint32_t>(cmd);
-    main_proxy.receive_command(epoch, (uint8_t) opkind::disconnect, size, cmd);
+    main_proxy.handle_command(epoch, (uint8_t) opkind::disconnect, size, cmd);
 }
 
 void sync_handler(char* msg)
 {
+    //CkPrintf("Sync handler called\n");
     char* cmd = msg + CmiMsgHeaderSizeBytes;
     int epoch = extract<int>(cmd);
     uint32_t size = extract<uint32_t>(cmd);
     server.reply_buffer[epoch] = CcsDelayReply();
-    main_proxy.receive_command(epoch, (uint8_t) opkind::sync, size, cmd);
+    main_proxy.handle_command(epoch, (uint8_t) opkind::sync, size, cmd);
 }
 
 inline void exit_server(char* msg)
@@ -78,7 +79,6 @@ Main::Main(CkArgMsg* msg)
     Server::initialize();
     register_handlers();
     ct::init();
-    thisProxy.start();
 #ifndef NDEBUG
     CkPrintf("Initialization done\n");
 #endif
@@ -96,6 +96,31 @@ void Main::register_handlers()
     CcsRegisterHandler("aum_exit", (CmiHandler) exit_server);
 }
 
+void Main::handle_command(int epoch, uint8_t kind, uint32_t size, char* cmd)
+{
+    if (epoch == EPOCH)
+    {
+        execute_command(epoch, kind, (int) size, cmd);
+        EPOCH++;
+        while (!command_buffer.empty() && std::get<0>(command_buffer.top()) == EPOCH)
+        {
+            buffer_t buffer = command_buffer.top();
+            //CkPrintf("Executing buffered at epoch %i, current %i\n", std::get<0>(buffer), EPOCH);
+            execute_command(std::get<0>(buffer), std::get<1>(buffer), (int) size, std::get<2>(buffer));
+            free(std::get<2>(buffer));
+            command_buffer.pop();
+            EPOCH++;
+        }
+    }
+    else
+    {
+        //CkPrintf("Buffering on epoch %i, current %i\n", epoch, EPOCH);
+        char* cmd_copy = (char*) malloc(size * sizeof(char));
+        std::memcpy(cmd_copy, cmd, size * sizeof(char));
+        command_buffer.push(std::make_tuple(epoch, kind, cmd_copy));
+    }
+}
+
 void Main::send_reply(int epoch, int size, char* msg)
 {
     auto reply = server.reply_buffer.find(epoch);
@@ -109,6 +134,7 @@ void Main::execute_operation(int epoch, int size, char* cmd)
 {
     // first delete arrays
     uint32_t num_deletions = extract<uint32_t>(cmd);
+    //CkPrintf("Num deletions = %u\n", num_deletions);
     for (int i = 0; i < num_deletions; i++)
     {
         ct_name_t name = extract<ct_name_t>(cmd);
@@ -233,7 +259,7 @@ void Main::execute_fetch(int epoch, int size, char* cmd)
                 double value = x.get();
                 reply = (char*) &value;
                 reply_size += 8;
-                main_proxy.send_reply(epoch, reply_size, reply);
+                send_reply(epoch, reply_size, reply);
                 //CcsSendReply(reply_size, reply);
             }    
             else

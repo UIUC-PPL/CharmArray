@@ -11,6 +11,7 @@
 
 using ct_name_t = uint64_t;
 using ct_array_t = std::variant<ct::scalar, ct::vector, ct::matrix, double>;
+using buffer_t = std::tuple<int, uint8_t, char*>;
 std::unordered_map<ct_name_t, ct_array_t> symbol_table;
 std::stack<uint8_t> client_ids;
 
@@ -33,8 +34,7 @@ enum class opkind : uint8_t
 class Main : public CBase_Main
 {
 public:
-    Main_SDAG_CODE
-
+    std::priority_queue<buffer_t, std::vector<buffer_t>, std::greater<buffer_t>> command_buffer;
     int EPOCH;
 
     Main(CkArgMsg* msg);
@@ -42,6 +42,8 @@ public:
     void register_handlers();
 
     void send_reply(int epoch, int size, char* msg);
+
+    void handle_command(int epoch, uint8_t kind, uint32_t size, char* cmd);
 
     void execute_command(int epoch, uint8_t kind, int size, char* cmd);
 
