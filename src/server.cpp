@@ -50,6 +50,7 @@ void connection_handler(char* msg)
 
 void disconnection_handler(char* msg)
 {
+    CkExit();
     char* cmd = msg + CmiMsgHeaderSizeBytes;
     int epoch = extract<int>(cmd);
     uint32_t size = extract<uint32_t>(cmd);
@@ -135,11 +136,14 @@ void Main::execute_operation(int epoch, int size, char* cmd)
     // first delete arrays
     uint32_t num_deletions = extract<uint32_t>(cmd);
     //CkPrintf("Num deletions = %u\n", num_deletions);
+    CkPrintf("Memory usage before delete is %f MB\n", CmiMemoryUsage() / (1024. * 1024.));
     for (int i = 0; i < num_deletions; i++)
     {
         ct_name_t name = extract<ct_name_t>(cmd);
         Server::remove(name);
     }
+    CkPrintf("Memory usage after %u deletions is %f MB\n", num_deletions, CmiMemoryUsage() / (1024. * 1024.));
+
     astnode* head = decode(cmd);
     std::vector<uint64_t> metadata;
     calculate(head, metadata);
@@ -213,7 +217,7 @@ void Main::execute_creation(int epoch, int size, char* cmd)
             {
                 res = ct::vector(size);
             }
-            Server::insert(res_name, res);
+            Server::insert(res_name, std::move(res));
             break;
         }
         case 2: {
@@ -235,7 +239,7 @@ void Main::execute_creation(int epoch, int size, char* cmd)
             {
                 res = ct::matrix(size1, size2);
             }
-            Server::insert(res_name, res);
+            Server::insert(res_name, std::move(res));
             break;
         }
         default: {

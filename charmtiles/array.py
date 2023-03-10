@@ -1,6 +1,8 @@
 import sys
 import warnings
 import numpy as np
+import weakref
+import sys
 from charmtiles.ast import get_max_depth, ASTNode
 from charmtiles.ccs import to_bytes, from_bytes, send_command_raw, send_command, \
     send_command_async, connect, get_creation_command, \
@@ -12,8 +14,9 @@ deletion_buffer_size = 0
 
 
 def create_ndarray(ndim, dtype, shape=None, name=None, command_buffer=None):
-    return ndarray(ndim, dtype=dtype, shape=shape, name=name,
+    z = ndarray(ndim, dtype=dtype, shape=shape, name=name,
                    command_buffer=command_buffer)
+    return z
 
 
 def from_numpy(nparr):
@@ -29,6 +32,7 @@ class ndarray:
         The argument 'name' should be None except when wrapping
         an array that already exists on the AUM backend server
         """
+
         if ndim > 2:
             raise NotImplementedError("Arrays of dimensionality greater than"
                                       "2 not supported yet")
@@ -49,7 +53,8 @@ class ndarray:
             self.valid = True
             if name:
                 self.name = name
-                self.command_buffer = ASTNode(self.name, 0, [self])
+                #self.command_buffer = None
+                self.command_buffer = ASTNode(self.name, 0, [weakref.proxy(self)])
             else:
                 self.name = get_name()
                 if nparr is not None:
@@ -58,7 +63,8 @@ class ndarray:
                     buf = None
                 cmd = get_creation_command(self, self.name, self.shape, buf=buf)
                 send_command_async(Handlers.creation_handler, cmd)
-                self.command_buffer = ASTNode(self.name, 0, [self])
+                #self.command_buffer = None
+                self.command_buffer = ASTNode(self.name, 0, [weakref.proxy(self)])
         else:
             self.name = name
             max_depth = get_max_depth()
@@ -77,8 +83,8 @@ class ndarray:
     def __len__(self):
         return self.shape[0]
 
-    def __str__(self):
-        print(self.get())
+    #def __str__(self):
+    #    print(self.get())
 
     #def __repr__(self):
     #    #self._flush_command_buffer()
@@ -163,7 +169,7 @@ class ndarray:
         for name, arr in validated_arrays.items():
             reply_size += 8 + 8 * arr.ndim
         if not debug:
-            #print("Deletion size :", deletion_buffer_size)
+            print("Deletion size :", deletion_buffer_size)
             cmd = to_bytes(deletion_buffer_size, 'I') + deletion_buffer + cmd
             cmd = to_bytes(get_epoch(), 'i') + to_bytes(len(cmd), 'I') + cmd
             send_command_async(Handlers.operation_handler, cmd)

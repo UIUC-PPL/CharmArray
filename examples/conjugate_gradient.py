@@ -3,11 +3,13 @@ import charmtiles.linalg as lg
 from charmtiles.ccs import enable_debug, sync
 from charmtiles.ast import set_max_depth
 import numpy as np
+import gc
 
 import time
 
 #enable_debug()
 set_max_depth(10)
+#gc.set_threshold(1, 1, 1)
 
 def solve(A, b, x):
     r = b - A @ x
@@ -15,6 +17,8 @@ def solve(A, b, x):
     rsold = r @ r
 
     for i in range(100):
+        #if i % 10 == 0:
+        gc.collect()
         Ap = A @ p
         alpha = rsold / (p @ Ap)
 
@@ -35,9 +39,9 @@ def solve(A, b, x):
 if __name__ == '__main__':
     connect("172.17.0.1", 10000)
 
-    A = ndarray(2, (1000, 1000), np.float64)
-    b = ndarray(1, 1000, np.float64)
-    x = ndarray(1, 1000, np.float64)
+    A = ndarray(2, (184, 184), np.float64)
+    b = ndarray(1, 184, np.float64)
+    x = ndarray(1, 184, np.float64)
 
     #d = (b @ x).get()
 

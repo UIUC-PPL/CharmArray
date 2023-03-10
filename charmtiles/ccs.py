@@ -77,7 +77,7 @@ def disconnect():
         deletion_buffer_size = b''
     cmd = to_bytes(client_id, 'B')
     cmd = to_bytes(get_epoch(), 'i') + to_bytes(len(cmd), 'I') + cmd
-    #send_command_async(Handlers.disconnection_handler, cmd)
+    send_command_async(Handlers.disconnection_handler, cmd)
 
 def get_creation_command(arr, name, shape, buf=None):
     """
