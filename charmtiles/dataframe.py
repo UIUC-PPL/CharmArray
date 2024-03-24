@@ -3,15 +3,15 @@ import warnings
 import numpy as np
 import weakref
 import sys
+import struct
 import pandas as pd
 from charmtiles.ccs import to_bytes, from_bytes, send_command_raw, send_command, \
     send_command, get_creation_command, \
-    get_epoch, get_name, get_fetch_command, Handlers, OPCODES, is_debug
+    get_epoch, get_name, get_fetch_command, Handlers, OPCODES, is_debug, connect
 
 
 deletion_buffer = b''
 deletion_buffer_size = 0
-
 
 class nddataframe:
     def __init__(self, data: pd.DataFrame):
@@ -25,18 +25,57 @@ class nddataframe:
         self.name = get_name()
         self.col_map = dict()
         self.shape = data.shape
+        
+        return self._create_charm_dataframe()
+        
+    def _create_charm_dataframe(self):
         buf = b""
         buf += to_bytes(self.name, "L")
-        buf += to_bytes(data.shape[0], "L") 
-        buf += to_bytes(data.shape[1], "L")
-        for col in data.columns:
+        self.total_rows = self.data.shape[0]
+        self.total_cols = self.data.shape[1] + 1
+        buf += to_bytes(self.total_rows, "L") 
+        buf += to_bytes(self.total_cols, "L")
+        self.col_map["index"] = get_name()
+        buf += to_bytes(self.col_map["index"], "L")
+        for col in self.data.columns:
             self.col_map[col] = get_name()
             buf += to_bytes(self.col_map[col], "L")
-            for row in data[col]:
-                buf += to_bytes(row, "L")
-        cmd = to_bytes(get_epoch(), 'i') + to_bytes(len(buf), 'I') + buf
-        send_command(Handlers.creation_handler, cmd)
+        
+        for index in self.data.index:
+            subset = data.iloc[index]
+            buf += to_bytes(index, "f")
+            print(index)
+            for col in self.data.columns:
+                buf += to_bytes(subset[col], "f")
+                print(subset[col])
+        self.create_cmd = to_bytes(get_epoch(), "L") + to_bytes(len(buf), "L") + buf
+        self.reverse_col_map = {v:k for k, v in self.col_map.items()}
+        send_command(Handlers.pd_creation_handler, self.create_cmd)
+    
+    def _process_charm_dataframe_results(self):
+        response = self.create_cmd
+        
+        epoch, buffer_length, name, rows, columns = struct.unpack("5L", response[0:40])
+        
+        first_data_position = 40 + (columns) * 8
 
+        column_names = [self.reverse_col_map[col] for col in struct.unpack(f"{columns }L", response[40:first_data_position])]
+                
+        results = []
+
+        for row in range(rows):
+            results.append(dict())
+            for col in range(columns):
+                position = first_data_position + (row * columns + col)*4
+                results[row][column_names[col]] = struct.unpack("f", response[position: position + 4])[0]
+        
+        final = pd.DataFrame(results).set_index("index")
+
+        final.index.name = None
+        
+        return final
+                    
+    
     def _flush_command_buffer(self):
         # send the command to server
         # finally set command buffer to array name

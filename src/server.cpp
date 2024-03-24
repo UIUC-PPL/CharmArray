@@ -192,10 +192,10 @@ void Main::execute_command(int epoch, uint8_t kind, int size, char* cmd)
             execute_sync(epoch, size, cmd);
             break;
         }
-        // case opkind::pd_creation: {
-        //     execute_pd_creation(epoch, size, cmd);
-        //     break;
-        // }
+        case opkind::pd_creation: {
+            execute_pd_creation(epoch, size, cmd);
+            break;
+        }
     }
 }
 
