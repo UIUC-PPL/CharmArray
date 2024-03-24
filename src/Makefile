@@ -15,7 +15,7 @@ server: server.cpp server_ci
 	$(CHARMC) $< -L$(LIBS_DIR)/charmtyles -lcharmtyles -I$(BASE_DIR) -I$(BASE_DIR)/charmtyles/backend -o $@.out $(OPTS)
 
 run-server: server.out
-	./charmrun +p1 ./server.out ++server ++server-port 10000 ++local
+	./charmrun +p1 ./server.out ++server ++server-port 10000
 
 clean:
 	rm *.decl.h *.def.h *.out charmrun
