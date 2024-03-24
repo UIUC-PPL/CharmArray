@@ -1,7 +1,7 @@
-CHARMC=/home/adityapb/charm/charm/netlrts-linux-x86_64/bin/charmc
-BASE_DIR=/home/adityapb/charm/LibCharmtyles
+CHARMC=/u/mgartenhaus/charm/netlrts-linux-x86_64/bin/charmc
+BASE_DIR=/u/mgartenhaus/LibCharmtyles
 LIBS_DIR=$(BASE_DIR)
-EIGEN_DIR = /usr/include/eigen3
+EIGEN_DIR = /u/mgartenhaus/eigen
 OPTS=-c++-option -std=c++17 -O3 -I$(EIGEN_DIR) -DNDEBUG -g
 
 all: server

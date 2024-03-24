@@ -13,8 +13,8 @@ def get_version():
 
 def compile_server():
     charmc = os.environ.get('CHARMC',
-                            '/home/adityapb/charm/charm/netlrts-linux-x86_64/bin/charmc')
-    aum_base = os.environ.get('AUM_HOME', '/home/adityapb/charm/LibCharmtyles')
+                            '/u/mgartenhaus/charm/mpi-linux-x86_64/bin/charmc')
+    aum_base = os.environ.get('AUM_HOME', '/u/mgartenhaus/LibCharmtyles')
     subprocess.run(["make", "-C", "src/",
                     "CHARMC=%s" % charmc, "BASE_DIR=%s" % aum_base])
 

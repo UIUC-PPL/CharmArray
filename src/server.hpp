@@ -28,7 +28,8 @@ enum class opkind : uint8_t
     fetch = 2,
     deletion = 3,
     disconnect = 4,
-    sync = 5
+    sync = 5,
+    pd_creation = 6
 };
 
 class Main : public CBase_Main

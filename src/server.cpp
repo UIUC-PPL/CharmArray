@@ -67,6 +67,15 @@ void sync_handler(char* msg)
     main_proxy.handle_command(epoch, (uint8_t) opkind::sync, size, cmd);
 }
 
+void pd_creation_handler(char* msg) {
+    char* cmd = msg + CmiMsgHeaderSizeBytes;
+    int epoch = extract<int>(cmd);
+    if (epoch == 0)
+        start_time = CkTimer();
+    uint32_t size = extract<uint32_t>(cmd);
+    main_proxy.handle_command(epoch, (uint8_t) opkind::pd_creation, size, cmd);
+}
+
 inline void exit_server(char* msg)
 {
     CkExit();
@@ -95,6 +104,10 @@ void Main::register_handlers()
     CcsRegisterHandler("aum_delete", (CmiHandler) delete_handler);
     CcsRegisterHandler("aum_sync", (CmiHandler) sync_handler);
     CcsRegisterHandler("aum_exit", (CmiHandler) exit_server);
+    // CcsRegisterHandler("pd_creation", (CmiHandler) pd_creation_handler);
+    // CcsRegisterHandler("pd_operation", (CmiHandler) pd_operation_handler);
+    // CcsRegisterHandler("pd_fetch", (CmiHandler) pd_fetch_handler);
+    // CcsRegisterHandler("pd_delete", (CmiHandler) pd_delete_handler);
 }
 
 void Main::handle_command(int epoch, uint8_t kind, uint32_t size, char* cmd)
@@ -179,6 +192,10 @@ void Main::execute_command(int epoch, uint8_t kind, int size, char* cmd)
             execute_sync(epoch, size, cmd);
             break;
         }
+        // case opkind::pd_creation: {
+        //     execute_pd_creation(epoch, size, cmd);
+        //     break;
+        // }
     }
 }
 
@@ -296,3 +313,16 @@ void Main::execute_sync(int epoch, int size, char* cmd)
     bool r = true;
     send_reply(epoch, 1, (char*) &r);
 }
+
+// void Main::execute_pd_creation(int epoch, int size, char* cmd)
+// {
+//     /* First 64 bits are number of rows then number of columns
+//      */
+//     // FIXME need a field for dtype
+//     ct_name_t res_name = extract<ct_name_t>(cmd);
+//     uint32_t rows = extract<uint32_t>(cmd);
+//     uint32_t columns = extract<uint32_t>(cmd);
+//     int bytes_per_char = 1000;
+//     int totalChars = ((rows * columns * 64) / bytes_per_char + 1);
+//     // TODO: need to create the charArray
+// }

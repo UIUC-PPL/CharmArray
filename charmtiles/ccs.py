@@ -1,7 +1,6 @@
 import struct
 import atexit
 from pyccs import Server
-from charmtiles import array
 
 debug = False
 server = None
@@ -119,4 +118,9 @@ class Handlers(object):
     delete_handler = b'aum_delete'
     sync_handler = b'aum_sync'
     exit_handler = b'aum_exit'
-
+    pd_creation_handler = b'pd_creation'
+    pd_operation_handler = b'pd_operation'
+    pd_fetch_handler = b'pd_fetch'
+    pd_delete_handler = b'pd_delete'
+    sync_handler = b'aum_sync'
+    exit_handler = b'aum_exit'
