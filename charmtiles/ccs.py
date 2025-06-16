@@ -71,7 +71,7 @@ def disconnect():
     global client_id, deletion_buffer, deletion_buffer_size
     if deletion_buffer_size > 0:
         cmd = to_bytes(len(deletion_buffer), 'I') + deletion_buffer
-        cmd = to_bytes(get_epoch(), 'i') + to_bytes(cmd, 'I') + cmd
+        cmd = to_bytes(get_epoch(), 'i') + to_bytes(len(cmd), 'I') + cmd
         send_command_async(Handlers.delete_handler, cmd)
         deletion_buffer = b''
         deletion_buffer_size = b''
