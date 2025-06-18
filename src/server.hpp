@@ -208,13 +208,14 @@ ct_array_t calculate(astnode* node, std::vector<uint64_t> &metadata)
                 [&](auto& x, auto& y) {
                     using T = std::decay_t<decltype(x)>;
                     using V = std::decay_t<decltype(y)>;
-                    if constexpr(std::is_same_v<T, ct::scalar>)
-                        op1 = x.get();
-                    else if constexpr(std::is_same_v<V, ct::scalar>)
-                        op2 = y.get();
-                    else
-                        CmiAbort("Operation not permitted4");
-                    res = op1 / op2;
+                    if constexpr(std::is_same_v<T, ct::scalar> && std::is_same_v<V, ct::scalar>)
+                        res = x.get() / y.get();
+                    else if constexpr(std::is_same_v<T, ct::vector> && std::is_same_v<V, ct::scalar>)
+                        res = x / y.get();
+                    else if constexpr(std::is_same_v<T, ct::scalar> && std::is_same_v<V, ct::vector>)
+                        res = x.get() / y;
+                    else 
+                        CmiAbort("Operation not permitted4");  
                 }, s1, s2);
 
             if (node->store)
