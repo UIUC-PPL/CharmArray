@@ -71,6 +71,11 @@ public:
     value = std::sqrt(value);
   }
 
+  inline void operator()(std::size_t rows, std::size_t cols, double &value) final
+  {
+    value = std::sqrt(value);
+  }
+
   PUPable_decl(sqrt_t);
   sqrt_t(CkMigrateMessage *m)
       : ct::unary_operator(m)
@@ -346,7 +351,7 @@ ct_array_t calculate(astnode *node, std::vector<uint64_t> &metadata)
         [&](auto &a)
         {
           using T = std::decay_t<decltype(a)>;
-          if constexpr (std::is_same_v<T, ct::vector>)
+          if constexpr (std::is_same_v<T, ct::vector> || std::is_same_v<T, ct::matrix>)
           {
             std::shared_ptr<sqrt_t> sqrt_;
             ct::unary_expr(a, sqrt_);
@@ -355,10 +360,6 @@ ct_array_t calculate(astnode *node, std::vector<uint64_t> &metadata)
           else if constexpr (std::is_same_v<T, ct::scalar>)
           {
             res = std::sqrt(a.get());
-          }
-          else
-          {
-            CmiAbort("Operation not implemeted for matrices");
           }
         },
         s1);
