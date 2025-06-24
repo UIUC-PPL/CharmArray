@@ -354,8 +354,7 @@ ct_array_t calculate(astnode *node, std::vector<uint64_t> &metadata)
           if constexpr (std::is_same_v<T, ct::vector> || std::is_same_v<T, ct::matrix>)
           {
             std::shared_ptr<sqrt_t> sqrt_;
-            ct::unary_expr(a, sqrt_);
-            res = a;
+            res = ct::unary_expr(a, sqrt_);
           }
           else if constexpr (std::is_same_v<T, ct::scalar>)
           {
