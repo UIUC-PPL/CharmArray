@@ -194,9 +194,8 @@ class ndarray:
             total_size = self.itemsize
             for i in self.shape:
                 total_size*=i
-            data_ptr = send_command(Handlers.fetch_handler, cmd, reply_size=int(total_size))
-            data = cast(memoryview, data_ptr)
-            return np.frombuffer(data, np.dtype(self.dtype)).copy()
+            data_ptr = send_command_raw(Handlers.fetch_handler, cmd, reply_size=int(total_size))
+            return np.frombuffer(data_ptr, np.dtype(self.dtype)).copy()
 
     def evaluate(self):
         self._flush_command_buffer()

@@ -66,14 +66,14 @@ public:
 
   using ct::unary_operator::unary_operator;
 
-  inline void operator()(std::size_t index, double &value) final
+  inline double operator()(std::size_t index, double &value) final
   {
-    value = std::sqrt(value);
+    return std::sqrt(value);
   }
 
-  inline void operator()(std::size_t rows, std::size_t cols, double &value) final
+  inline double operator()(std::size_t rows, std::size_t cols, double &value) final
   {
-    value = std::sqrt(value);
+    return std::sqrt(value);
   }
 
   PUPable_decl(sqrt_t);
@@ -351,10 +351,17 @@ ct_array_t calculate(astnode *node, std::vector<uint64_t> &metadata)
         [&](auto &a)
         {
           using T = std::decay_t<decltype(a)>;
-          if constexpr (std::is_same_v<T, ct::vector> || std::is_same_v<T, ct::matrix>)
+          if constexpr (std::is_same_v<T, ct::vector>)
           {
             std::shared_ptr<sqrt_t> sqrt_;
-            res = ct::unary_expr(a, sqrt_);
+            ct::vector vec = ct::unary_expr(a, sqrt_);
+            res = ct_array_t{vec};
+          }
+          else if constexpr (std::is_same_v<T, ct::matrix>)
+          {
+            std::shared_ptr<sqrt_t> sqrt_;
+            ct::matrix mat = ct::unary_expr(a, sqrt_);
+            res = ct_array_t{mat};
           }
           else if constexpr (std::is_same_v<T, ct::scalar>)
           {
