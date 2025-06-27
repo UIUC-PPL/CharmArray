@@ -195,7 +195,7 @@ class ndarray:
             for i in self.shape:
                 total_size*=i
             data_ptr = send_command_raw(Handlers.fetch_handler, cmd, reply_size=int(total_size))
-            return np.frombuffer(data_ptr, np.dtype(self.dtype)).copy()
+            return np.frombuffer(data_ptr, np.dtype(self.dtype)).copy().reshape((self.shape[0], self.shape[1]))
 
     def evaluate(self):
         self._flush_command_buffer()

@@ -284,8 +284,16 @@ void Main::execute_fetch(int epoch, int size, char *cmd)
           reply_size += values.size() * sizeof(double);
           send_reply(epoch, reply_size, reply);
         }
-        else
-          CmiAbort("Operation not implemented1");
+        else if constexpr (std::is_same_v<T, ct::matrix>)
+        {
+          std::vector<std::vector<double>> values = x.get();
+          std::vector<double> flat;
+          for (const auto &row : values)
+            flat.insert(flat.end(), row.begin(), row.end());
+          reply = reinterpret_cast<char *>(flat.data());
+          reply_size += flat.size() * sizeof(double);
+          send_reply(epoch, reply_size, reply);
+        }
       },
       arr);
 }
