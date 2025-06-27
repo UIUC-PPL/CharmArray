@@ -1,7 +1,8 @@
 mainmodule server
 {
     extern module libcharmtyles;
-
+    PUPable sqrt_t;
+    
     mainchare Main
     {
         entry Main(CkArgMsg*);

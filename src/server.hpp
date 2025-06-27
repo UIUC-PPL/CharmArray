@@ -66,12 +66,12 @@ public:
 
   using ct::unary_operator::unary_operator;
 
-  inline double operator()(std::size_t index, double &value) final
+  inline double operator()(std::size_t index, double &value) override final
   {
     return std::sqrt(value);
   }
 
-  inline double operator()(std::size_t rows, std::size_t cols, double &value) final
+  inline double operator()(std::size_t rows, std::size_t cols, double &value) override final
   {
     return std::sqrt(value);
   }
@@ -302,7 +302,7 @@ ct_array_t calculate(astnode *node, std::vector<uint64_t> &metadata)
         {
           using T = std::decay_t<decltype(x)>;
           if constexpr (std::is_same_v<T, ct::vector> ||
-                        std::is_same_v<T, ct::scalar>)
+                        std::is_same_v<T, ct::scalar> || std::is_same_v<T, ct::matrix>)
             res = x;
           else
             CmiAbort("Matrix copy not implemented");
@@ -353,13 +353,13 @@ ct_array_t calculate(astnode *node, std::vector<uint64_t> &metadata)
           using T = std::decay_t<decltype(a)>;
           if constexpr (std::is_same_v<T, ct::vector>)
           {
-            std::shared_ptr<sqrt_t> sqrt_;
+            std::shared_ptr<ct::unary_operator> sqrt_ = std::make_shared<sqrt_t>();
             ct::vector vec = ct::unary_expr(a, sqrt_);
             res = ct_array_t{vec};
           }
           else if constexpr (std::is_same_v<T, ct::matrix>)
           {
-            std::shared_ptr<sqrt_t> sqrt_;
+            std::shared_ptr<ct::unary_operator> sqrt_ = std::make_shared<sqrt_t>();
             ct::matrix mat = ct::unary_expr(a, sqrt_);
             res = ct_array_t{mat};
           }
@@ -369,6 +369,10 @@ ct_array_t calculate(astnode *node, std::vector<uint64_t> &metadata)
           }
         },
         s1);
+    if (node->store)
+    {
+      Server::insert(node->name, res);
+    }
     return res;
   }
 

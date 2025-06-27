@@ -195,7 +195,7 @@ class ndarray:
             for i in self.shape:
                 total_size*=i
             data_ptr = send_command_raw(Handlers.fetch_handler, cmd, reply_size=int(total_size))
-            return np.frombuffer(data_ptr, np.dtype(self.dtype)).copy().reshape((self.shape[0], self.shape[1]))
+            return np.frombuffer(data_ptr, np.dtype(self.dtype)).copy().reshape(self.shape)
 
     def evaluate(self):
         self._flush_command_buffer()
@@ -207,11 +207,11 @@ class ndarray:
     def copy(self):
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('copy'), [self])
-        return create_ndarray(self.ndim, self.dtype,
+        return create_ndarray(self.ndim, self.dtype,shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
     def sqrt(self):
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('sqrt'), [self])
-        return create_ndarray(self.ndim, self.dtype,
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
 
