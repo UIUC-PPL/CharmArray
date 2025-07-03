@@ -66,12 +66,12 @@ public:
 
   using ct::unary_operator::unary_operator;
 
-  inline double operator()(std::size_t index, double &value) override final
+  inline double operator()(std::size_t index, double value) override final
   {
     return std::sqrt(value);
   }
 
-  inline double operator()(std::size_t rows, std::size_t cols, double &value) override final
+  inline double operator()(std::size_t rows, std::size_t cols, double value) override final
   {
     return std::sqrt(value);
   }
@@ -163,13 +163,28 @@ ct_array_t calculate(astnode *node, std::vector<uint64_t> &metadata)
         {
           using T = std::decay_t<decltype(x)>;
           using V = std::decay_t<decltype(y)>;
-          if constexpr (std::is_same_v<T, V> && !std::is_same_v<T, double> &&
-                        !std::is_same_v<T, ct::scalar>)
-            res = x + y;
-          else if constexpr (std::is_same_v<T, V> && std::is_same_v<T, ct::scalar>)
+          if constexpr ((std::is_same_v<T, ct::scalar> && std::is_same_v<V, ct::scalar>))
+          {
             res = x.get() + y.get();
+          }
+          else if constexpr ((std::is_same_v<T, ct::scalar>))
+          {
+            res = x.get() + y;
+          }
+          else if constexpr ((std::is_same_v<V, ct::scalar>))
+          {
+            res = x + y.get();
+          }
+          else if constexpr ((std::is_same_v<T, ct::vector> && std::is_same_v<V, ct::matrix>) ||
+                             (std::is_same_v<T, ct::matrix> && std::is_same_v<V, ct::vector>))
+          {
+            CkAbort("Vector + Matrix operations not supported");
+          }
           else
-            CmiAbort("Operation not permitted2");
+          {
+            // Everything else should work with the normal + operator
+            res = x + y;
+          }
         },
         s1, s2);
 
@@ -188,14 +203,28 @@ ct_array_t calculate(astnode *node, std::vector<uint64_t> &metadata)
         {
           using T = std::decay_t<decltype(x)>;
           using V = std::decay_t<decltype(y)>;
-          // if constexpr(std::is_same_v<T, V> && !std::is_same_v<T, double> && !std::is_same_v<T, ct::scalar>)
-          //     res = x - y;
-          // else if constexpr(std::is_same_v<T, V> && std::is_same_v<T, ct::scalar>)
-          //     res = x.get() - y.get();
-          if constexpr (std::is_same_v<T, V> && std::is_same_v<T, ct::vector>)
-            res = x - y;
+          if constexpr ((std::is_same_v<T, ct::scalar> && std::is_same_v<V, ct::scalar>))
+          {
+            res = x.get() - y.get();
+          }
+          else if constexpr ((std::is_same_v<T, ct::scalar>))
+          {
+            res = x.get() - y;
+          }
+          else if constexpr ((std::is_same_v<V, ct::scalar>))
+          {
+            res = x - y.get();
+          }
+          else if constexpr ((std::is_same_v<T, ct::vector> && std::is_same_v<V, ct::matrix>) ||
+                             (std::is_same_v<T, ct::matrix> && std::is_same_v<V, ct::vector>))
+          {
+            CkAbort("Vector + Matrix operations not supported");
+          }
           else
-            CmiAbort("Operation not permitted3");
+          {
+            // Everything else should work with the normal + operator
+            res = x - y;
+          }
         },
         s1, s2);
 
@@ -237,20 +266,34 @@ ct_array_t calculate(astnode *node, std::vector<uint64_t> &metadata)
     ct_array_t s1 = calculate(node->operands[0], metadata);
     ct_array_t s2 = calculate(node->operands[1], metadata);
     ct_array_t res;
-    double op1, op2;
 
     std::visit(
         [&](auto &x, auto &y)
         {
           using T = std::decay_t<decltype(x)>;
           using V = std::decay_t<decltype(y)>;
-          if constexpr (std::is_same_v<T, ct::scalar>)
-            op1 = x.get();
-          else if constexpr (std::is_same_v<V, ct::scalar>)
-            op2 = y.get();
+          if constexpr ((std::is_same_v<T, ct::scalar> && std::is_same_v<V, ct::scalar>))
+          {
+            res = x.get() / y.get();
+          }
+          else if constexpr ((std::is_same_v<T, ct::scalar>))
+          {
+            res = x.get() / y;
+          }
+          else if constexpr ((std::is_same_v<V, ct::scalar>))
+          {
+            res = x / y.get();
+          }
+          else if constexpr ((std::is_same_v<T, ct::vector> && std::is_same_v<V, ct::matrix>) ||
+                             (std::is_same_v<T, ct::matrix> && std::is_same_v<V, ct::vector>))
+          {
+            CkAbort("Vector + Matrix operations not supported");
+          }
           else
-            CmiAbort("Operation not permitted4");
-          res = op1 / op2;
+          {
+            // Everything else should work with the normal + operator
+            res = x / y;
+          }
         },
         s1, s2);
 
@@ -343,6 +386,39 @@ ct_array_t calculate(astnode *node, std::vector<uint64_t> &metadata)
     }
     return res;
   }
+
+  case operation::where:
+  {
+    ct_array_t s1 = calculate(node->operands[0], metadata);
+    ct_array_t s2 = calculate(node->operands[1], metadata);
+    ct_array_t s3 = calculate(node->operands[2], metadata);
+    ct_array_t res;
+
+    std::visit(
+        [&](auto &a, auto &x, auto &y)
+        {
+          using S = std::decay_t<decltype(a)>;
+          using T = std::decay_t<decltype(x)>;
+          using V = std::decay_t<decltype(y)>;
+          if constexpr (std::is_same_v<S, ct::vector> &&
+                            std::is_same_v<T, ct::vector> &&
+                            std::is_same_v<V, ct::vector> ||
+                        std::is_same_v<S, ct::matrix> &&
+                            std::is_same_v<T, ct::matrix> &&
+                            std::is_same_v<V, ct::matrix>)
+            res = ct::where(a, x, y);
+          else
+            CmiAbort("All where operations must be of the same type");
+        },
+        s1, s2, s3);
+
+    if (node->store)
+    {
+      Server::insert(node->name, res);
+    }
+    return res;
+  }
+
   case operation::sqrt:
   {
     ct_array_t s1 = calculate(node->operands[0], metadata);
@@ -366,6 +442,10 @@ ct_array_t calculate(astnode *node, std::vector<uint64_t> &metadata)
           else if constexpr (std::is_same_v<T, ct::scalar>)
           {
             res = std::sqrt(a.get());
+          }
+          else if constexpr (std::is_same_v<T, double>)
+          {
+            res = std::sqrt(a);
           }
         },
         s1);
@@ -405,6 +485,386 @@ ct_array_t calculate(astnode *node, std::vector<uint64_t> &metadata)
       Server::insert(node->name, res);
     return res;
   }
+  case operation::greater:
+  {
+    ct_array_t s1 = calculate(node->operands[0], metadata);
+    ct_array_t s2 = calculate(node->operands[1], metadata);
+    ct_array_t res;
+
+    std::visit(
+        [&](auto &x, auto &y)
+        {
+          using T = std::decay_t<decltype(x)>;
+          using V = std::decay_t<decltype(y)>;
+          if constexpr ((std::is_same_v<T, ct::vector> && std::is_same_v<V, ct::matrix>) ||
+                        (std::is_same_v<T, ct::matrix> && std::is_same_v<V, ct::vector>))
+          {
+            CkAbort("Vector + Matrix operations not supported");
+          }
+          else if constexpr ((std::is_same_v<T, ct::vector> || std::is_same_v<V, ct::vector> || std::is_same_v<T, ct::matrix> || std::is_same_v<V, ct::matrix>))
+          {
+            res = x > y;
+          }
+          else if constexpr ((std::is_same_v<T, ct::scalar> && std::is_same_v<V, ct::scalar>))
+          {
+            res = static_cast<double>(x.get() > y.get());
+          }
+          else if constexpr ((std::is_same_v<T, ct::scalar>))
+          {
+            res = static_cast<double>(x.get() > y);
+          }
+          else if constexpr ((std::is_same_v<V, ct::scalar>))
+          {
+            res = static_cast<double>(x > y.get());
+          }
+          else
+          {
+            res = static_cast<double>(x > y);
+          }
+        },
+        s1, s2);
+
+    if (node->store)
+      Server::insert(node->name, res);
+    return res;
+  }
+  case operation::lesser:
+  {
+    ct_array_t s1 = calculate(node->operands[0], metadata);
+    ct_array_t s2 = calculate(node->operands[1], metadata);
+    ct_array_t res;
+
+    std::visit(
+        [&](auto &x, auto &y)
+        {
+          using T = std::decay_t<decltype(x)>;
+          using V = std::decay_t<decltype(y)>;
+          if constexpr ((std::is_same_v<T, ct::vector> && std::is_same_v<V, ct::matrix>) ||
+                        (std::is_same_v<T, ct::matrix> && std::is_same_v<V, ct::vector>))
+          {
+            CkAbort("Vector + Matrix operations not supported");
+          }
+          else if constexpr ((std::is_same_v<T, ct::vector> || std::is_same_v<V, ct::vector> || std::is_same_v<T, ct::matrix> || std::is_same_v<V, ct::matrix>))
+          {
+            res = x < y;
+          }
+          else if constexpr ((std::is_same_v<T, ct::scalar> && std::is_same_v<V, ct::scalar>))
+          {
+            res = static_cast<double>(x.get() < y.get());
+          }
+          else if constexpr ((std::is_same_v<T, ct::scalar>))
+          {
+            res = static_cast<double>(x.get() < y);
+          }
+          else if constexpr ((std::is_same_v<V, ct::scalar>))
+          {
+            res = static_cast<double>(x < y.get());
+          }
+          else
+          {
+            res = static_cast<double>(x < y);
+          }
+        },
+        s1, s2);
+
+    if (node->store)
+      Server::insert(node->name, res);
+    return res;
+  }
+
+  case operation::geq:
+  {
+    ct_array_t s1 = calculate(node->operands[0], metadata);
+    ct_array_t s2 = calculate(node->operands[1], metadata);
+    ct_array_t res;
+
+    std::visit(
+        [&](auto &x, auto &y)
+        {
+          using T = std::decay_t<decltype(x)>;
+          using V = std::decay_t<decltype(y)>;
+          if constexpr ((std::is_same_v<T, ct::vector> && std::is_same_v<V, ct::matrix>) ||
+                        (std::is_same_v<T, ct::matrix> && std::is_same_v<V, ct::vector>))
+          {
+            CkAbort("Vector + Matrix operations not supported");
+          }
+          else if constexpr ((std::is_same_v<T, ct::vector> || std::is_same_v<V, ct::vector> || std::is_same_v<T, ct::matrix> || std::is_same_v<V, ct::matrix>))
+          {
+            res = x >= y;
+          }
+          else if constexpr ((std::is_same_v<T, ct::scalar> && std::is_same_v<V, ct::scalar>))
+          {
+            res = static_cast<double>(x.get() >= y.get());
+          }
+          else if constexpr ((std::is_same_v<T, ct::scalar>))
+          {
+            res = static_cast<double>(x.get() >= y);
+          }
+          else if constexpr ((std::is_same_v<V, ct::scalar>))
+          {
+            res = static_cast<double>(x >= y.get());
+          }
+          else
+          {
+            res = static_cast<double>(x >= y);
+          }
+        },
+        s1, s2);
+
+    if (node->store)
+      Server::insert(node->name, res);
+    return res;
+  }
+
+  case operation::leq:
+  {
+    ct_array_t s1 = calculate(node->operands[0], metadata);
+    ct_array_t s2 = calculate(node->operands[1], metadata);
+    ct_array_t res;
+
+    std::visit(
+        [&](auto &x, auto &y)
+        {
+          using T = std::decay_t<decltype(x)>;
+          using V = std::decay_t<decltype(y)>;
+          if constexpr ((std::is_same_v<T, ct::vector> && std::is_same_v<V, ct::matrix>) ||
+                        (std::is_same_v<T, ct::matrix> && std::is_same_v<V, ct::vector>))
+          {
+            CkAbort("Vector + Matrix operations not supported");
+          }
+          else if constexpr ((std::is_same_v<T, ct::vector> || std::is_same_v<V, ct::vector> || std::is_same_v<T, ct::matrix> || std::is_same_v<V, ct::matrix>))
+          {
+            res = x <= y;
+          }
+          else if constexpr ((std::is_same_v<T, ct::scalar> && std::is_same_v<V, ct::scalar>))
+          {
+            res = static_cast<double>(x.get() <= y.get());
+          }
+          else if constexpr ((std::is_same_v<T, ct::scalar>))
+          {
+            res = static_cast<double>(x.get() <= y);
+          }
+          else if constexpr ((std::is_same_v<V, ct::scalar>))
+          {
+            res = static_cast<double>(x <= y.get());
+          }
+          else
+          {
+            res = static_cast<double>(x <= y);
+          }
+        },
+        s1, s2);
+
+    if (node->store)
+      Server::insert(node->name, res);
+    return res;
+  }
+
+  case operation::eq:
+  {
+    ct_array_t s1 = calculate(node->operands[0], metadata);
+    ct_array_t s2 = calculate(node->operands[1], metadata);
+    ct_array_t res;
+
+    std::visit(
+        [&](auto &x, auto &y)
+        {
+          using T = std::decay_t<decltype(x)>;
+          using V = std::decay_t<decltype(y)>;
+          if constexpr ((std::is_same_v<T, ct::vector> && std::is_same_v<V, ct::matrix>) ||
+                        (std::is_same_v<T, ct::matrix> && std::is_same_v<V, ct::vector>))
+          {
+            CkAbort("Vector + Matrix operations not supported");
+          }
+          else if constexpr ((std::is_same_v<T, ct::vector> || std::is_same_v<V, ct::vector> || std::is_same_v<T, ct::matrix> || std::is_same_v<V, ct::matrix>))
+          {
+            res = x == y;
+          }
+          else if constexpr ((std::is_same_v<T, ct::scalar> && std::is_same_v<V, ct::scalar>))
+          {
+            res = static_cast<double>(x.get() == y.get());
+          }
+          else if constexpr ((std::is_same_v<T, ct::scalar>))
+          {
+            res = static_cast<double>(x.get() == y);
+          }
+          else if constexpr ((std::is_same_v<V, ct::scalar>))
+          {
+            res = static_cast<double>(x == y.get());
+          }
+          else
+          {
+            res = static_cast<double>(x == y);
+          }
+        },
+        s1, s2);
+
+    if (node->store)
+      Server::insert(node->name, res);
+    return res;
+  }
+
+  case operation::neq:
+  {
+    ct_array_t s1 = calculate(node->operands[0], metadata);
+    ct_array_t s2 = calculate(node->operands[1], metadata);
+    ct_array_t res;
+
+    std::visit(
+        [&](auto &x, auto &y)
+        {
+          using T = std::decay_t<decltype(x)>;
+          using V = std::decay_t<decltype(y)>;
+          if constexpr ((std::is_same_v<T, ct::vector> && std::is_same_v<V, ct::matrix>) ||
+                        (std::is_same_v<T, ct::matrix> && std::is_same_v<V, ct::vector>))
+          {
+            CkAbort("Vector + Matrix operations not supported");
+          }
+          else if constexpr ((std::is_same_v<T, ct::vector> || std::is_same_v<V, ct::vector> || std::is_same_v<T, ct::matrix> || std::is_same_v<V, ct::matrix>))
+          {
+            res = x != y;
+          }
+          else if constexpr ((std::is_same_v<T, ct::scalar> && std::is_same_v<V, ct::scalar>))
+          {
+            res = static_cast<double>(x.get() != y.get());
+          }
+          else if constexpr ((std::is_same_v<T, ct::scalar>))
+          {
+            res = static_cast<double>(x.get() != y);
+          }
+          else if constexpr ((std::is_same_v<V, ct::scalar>))
+          {
+            res = static_cast<double>(x != y.get());
+          }
+          else
+          {
+            res = static_cast<double>(x != y);
+          }
+        },
+        s1, s2);
+
+    if (node->store)
+      Server::insert(node->name, res);
+    return res;
+  }
+
+  case operation::logical_and:
+  {
+    ct_array_t s1 = calculate(node->operands[0], metadata);
+    ct_array_t s2 = calculate(node->operands[1], metadata);
+    ct_array_t res;
+
+    std::visit(
+        [&](auto &x, auto &y)
+        {
+          using T = std::decay_t<decltype(x)>;
+          using V = std::decay_t<decltype(y)>;
+          if constexpr ((std::is_same_v<T, ct::vector> && std::is_same_v<V, ct::matrix>) ||
+                        (std::is_same_v<T, ct::matrix> && std::is_same_v<V, ct::vector>))
+          {
+            CkAbort("Vector + Matrix operations not supported");
+          }
+          else if constexpr ((std::is_same_v<T, ct::vector> || std::is_same_v<V, ct::vector> || std::is_same_v<T, ct::matrix> || std::is_same_v<V, ct::matrix>))
+          {
+            res = x && y;
+          }
+          else if constexpr ((std::is_same_v<T, ct::scalar> && std::is_same_v<V, ct::scalar>))
+          {
+            res = static_cast<double>(x.get() && y.get());
+          }
+          else if constexpr ((std::is_same_v<T, ct::scalar>))
+          {
+            res = static_cast<double>(x.get() && y);
+          }
+          else if constexpr ((std::is_same_v<V, ct::scalar>))
+          {
+            res = static_cast<double>(x && y.get());
+          }
+          else
+          {
+            res = static_cast<double>(x && y);
+          }
+        },
+        s1, s2);
+
+    if (node->store)
+      Server::insert(node->name, res);
+    return res;
+  }
+
+  case operation::logical_or:
+  {
+    ct_array_t s1 = calculate(node->operands[0], metadata);
+    ct_array_t s2 = calculate(node->operands[1], metadata);
+    ct_array_t res;
+
+    std::visit(
+        [&](auto &x, auto &y)
+        {
+          using T = std::decay_t<decltype(x)>;
+          using V = std::decay_t<decltype(y)>;
+          if constexpr ((std::is_same_v<T, ct::vector> && std::is_same_v<V, ct::matrix>) ||
+                        (std::is_same_v<T, ct::matrix> && std::is_same_v<V, ct::vector>))
+          {
+            CkAbort("Vector + Matrix operations not supported");
+          }
+          else if constexpr ((std::is_same_v<T, ct::vector> || std::is_same_v<V, ct::vector> || std::is_same_v<T, ct::matrix> || std::is_same_v<V, ct::matrix>))
+          {
+            res = x || y;
+          }
+          else if constexpr ((std::is_same_v<T, ct::scalar> && std::is_same_v<V, ct::scalar>))
+          {
+            res = static_cast<double>(x.get() || y.get());
+          }
+          else if constexpr ((std::is_same_v<T, ct::scalar>))
+          {
+            res = static_cast<double>(x.get() || y);
+          }
+          else if constexpr ((std::is_same_v<V, ct::scalar>))
+          {
+            res = static_cast<double>(x || y.get());
+          }
+          else
+          {
+            res = static_cast<double>(x || y);
+          }
+        },
+        s1, s2);
+
+    if (node->store)
+      Server::insert(node->name, res);
+    return res;
+  }
+
+  case operation::logical_not:
+  {
+    ct_array_t s1 = calculate(node->operands[0], metadata);
+    ct_array_t res;
+
+    std::visit(
+        [&](auto &x)
+        {
+          using T = std::decay_t<decltype(x)>;
+          if constexpr ((std::is_same_v<T, ct::vector> || std::is_same_v<T, ct::matrix>))
+          {
+            res = !x;
+          }
+          else if constexpr ((std::is_same_v<T, ct::scalar>))
+          {
+            res = static_cast<double>(!x.get());
+          }
+          else
+          {
+            res = static_cast<double>(!x);
+          }
+        },
+        s1);
+
+    if (node->store)
+      Server::insert(node->name, res);
+    return res;
+  }
+
   default:
   {
     CmiAbort("Operation not implemented8");

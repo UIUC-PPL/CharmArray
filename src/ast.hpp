@@ -21,7 +21,17 @@ enum class operation : uint64_t
   copy = 6,
   axpy = 7,
   axpy_multiplier = 8,
-  sqrt = 10
+  sqrt = 10,
+  greater = 11,
+  lesser = 12,
+  geq = 13,
+  leq = 14,
+  eq = 15,
+  neq = 16,
+  logical_and = 17,
+  logical_or = 18,
+  logical_not = 19,
+  where = 20
 };
 
 class astnode

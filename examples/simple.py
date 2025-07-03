@@ -16,16 +16,18 @@ class A(object):
 def f():
     #print(gc.set_threshold(300, 10, 10))
 
-    b = ndarray(1, 100, np.float64)
+    b = ndarray(2, (100,100), np.float64, init_value=4.0)
     #print(c_long.from_address(id(b)).value)
     #print(gc.get_referrers(b))
 
     #a = ndarray(1, 100, np.float64)
     #for i in range(10):
-    for i in range(100):
-        z = b + b
-        gc.collect()
-    #print(z)
+    c = ndarray.where(b, b+2, b < -1)
+    # b.evaluate()
+    # for i in range(100):
+    #     z = b + b
+    #     gc.collect()
+    print(c.get())
     #print(sys.getrefcount(z))
     #print("Z", gc.get_referrers(z), b, z)
     #print("b", gc.get_referrers(b))
@@ -39,7 +41,7 @@ def f():
 
 
 if __name__ == '__main__':
-    connect("172.17.0.1", 10000)
+    connect("192.168.0.250", 10000)
     s = f()
     sync()
 

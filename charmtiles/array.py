@@ -117,10 +117,88 @@ class ndarray:
 
     def __rsub__(self, other):
         return -1 * (self - other)
+    
+    def __lt__(self, other):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('<'), [self, other])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def __rlt__(self, other):
+        return self >= other
+    
+    def __gt__(self, other):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('>'), [self, other])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def __rgt__(self, other):
+        return self <= other
+    
+    def __le__(self, other):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('<='), [self, other])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def __rle__(self, other):
+        return self > other
+    
+    def __ge__(self, other):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('>='), [self, other])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def __rge__(self, other):
+        return self < other
+    
+    def __eq__(self, other):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('=='), [self, other])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def __req__(self, other):
+        return self == other
+    
+    def __ne__(self, other):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('!='), [self, other])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def __rne__(self, other):
+        return self != other
+    
+    def __and__(self, other):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('&'), [self, other])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def __rand__(self, other):
+        return self & other
+    
+    def __or__(self, other):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('|'), [self, other])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def __ror__(self, other):
+        return self | other
+    
+    def __invert__(self):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('!'), [self])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
 
     def __mul__(self, other):
         if self.ndim > 0 or (isinstance(other, ndarray) and other.ndim > 0):
-            RuntimeError("Cannote multiply two arrays")
+            RuntimeError("Cannot multiply two arrays")
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('*'), [self, other])
         return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
@@ -212,6 +290,12 @@ class ndarray:
     def sqrt(self):
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('sqrt'), [self])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def where(self, other, third):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('where'), [self, other, third])
         return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
 
