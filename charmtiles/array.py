@@ -291,7 +291,49 @@ class ndarray:
                               name=res, command_buffer=cmd_buffer)
     def sqrt(self):
         res = get_name()
-        cmd_buffer = ASTNode(res, OPCODES.get('sqrt'), [self], arg=0.5)
+        cmd_buffer = ASTNode(res, OPCODES.get('pow'), [self], arg=0.5)
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def cbrt(self):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('pow'), [self], arg=1/3)
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def pow(self, exponent):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('pow'), [self], arg=exponent)
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def log(self, base=np.e):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('log'), [self], arg=base)
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def log10(self):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('log'), [self], arg=10)
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def log2(self):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('log'), [self], arg=2)
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def exp(self, exp):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('exp'), [self], arg=exp)
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def absolute(self):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('abs'), [self])
         return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
     
