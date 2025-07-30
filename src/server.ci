@@ -1,7 +1,9 @@
 mainmodule server
 {
     extern module libcharmtyles;
-    PUPable sqrt_t;
+    PUPable pow_t;
+    PUPable log_t;
+    PUPable exp_t;
     
     mainchare Main
     {

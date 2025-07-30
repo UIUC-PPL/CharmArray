@@ -20,7 +20,7 @@ def get_max_depth():
 
 
 class ASTNode(object):
-    def __init__(self, name, opcode, operands):
+    def __init__(self, name, opcode, operands, arg=0.0):
         from charmtiles.array import ndarray
         # contains opcode, operands
         # operands are ndarrays
@@ -28,6 +28,7 @@ class ASTNode(object):
         self.opcode = opcode
         self.operands = operands
         self.depth = 0
+        self.arg = arg
         if self.opcode != 0:
             for op in self.operands:
                 if isinstance(op, ndarray):
@@ -65,6 +66,7 @@ class ASTNode(object):
                 opcmd += to_bytes(op, 'd')
                 cmd += to_bytes(len(opcmd), 'I')
                 cmd += opcmd
+        cmd += to_bytes(self.arg, 'd')
         return cmd
 
     def plot_graph(self, validated_arrays={}, G=None, node_map={},

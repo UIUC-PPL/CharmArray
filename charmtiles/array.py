@@ -289,7 +289,7 @@ class ndarray:
                               name=res, command_buffer=cmd_buffer)
     def sqrt(self):
         res = get_name()
-        cmd_buffer = ASTNode(res, OPCODES.get('sqrt'), [self])
+        cmd_buffer = ASTNode(res, OPCODES.get('sqrt'), [self], arg=0.5)
         return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
     

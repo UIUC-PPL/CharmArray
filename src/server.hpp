@@ -58,26 +58,94 @@ public:
   void execute_sync(int epoch, int size, char *cmd);
 };
 
-class sqrt_t : public ct::unary_operator
+class pow_t : public ct::unary_operator
 {
 public:
-  sqrt_t() = default;
-  ~sqrt_t() {}
+  pow_t(double arg) : arg_(arg) {}
+  ~pow_t() {}
 
   using ct::unary_operator::unary_operator;
 
   inline double operator()(std::size_t index, double value) override final
   {
-    return std::sqrt(value);
+    return std::pow(value, arg_);
   }
 
   inline double operator()(std::size_t rows, std::size_t cols, double value) override final
   {
-    return std::sqrt(value);
+    return std::pow(value, arg_);
   }
 
-  PUPable_decl(sqrt_t);
-  sqrt_t(CkMigrateMessage *m)
+  PUPable_decl(pow_t);
+  pow_t(CkMigrateMessage *m)
+      : ct::unary_operator(m)
+  {
+  }
+
+  void pup(PUP::er &p) final
+  {
+    p | arg_;
+    ct::unary_operator::pup(p);
+  }
+
+private:
+  double arg_;
+};
+
+class log_t : public ct::unary_operator
+{
+public:
+  log_t(double arg) : arg_(arg) {}
+  ~log_t() {}
+
+  using ct::unary_operator::unary_operator;
+
+  inline double operator()(std::size_t index, double value) override final
+  {
+    return std::log(value) / std::log(arg_);
+  }
+
+  inline double operator()(std::size_t rows, std::size_t cols, double value) override final
+  {
+    return std::log(value) / std::log(arg_);
+  }
+
+  PUPable_decl(log_t);
+  log_t(CkMigrateMessage *m)
+      : ct::unary_operator(m)
+  {
+  }
+
+  void pup(PUP::er &p) final
+  {
+    p | arg_;
+    ct::unary_operator::pup(p);
+  }
+
+private:
+  double arg_;
+};
+
+class exp_t : public ct::unary_operator
+{
+public:
+  exp_t() = default;
+  ~exp_t() {}
+
+  using ct::unary_operator::unary_operator;
+
+  inline double operator()(std::size_t index, double value) override final
+  {
+    return std::exp(value);
+  }
+
+  inline double operator()(std::size_t rows, std::size_t cols, double value) override final
+  {
+    return std::exp(value);
+  }
+
+  PUPable_decl(exp_t);
+  exp_t(CkMigrateMessage *m)
       : ct::unary_operator(m)
   {
   }
@@ -419,7 +487,7 @@ ct_array_t calculate(astnode *node, std::vector<uint64_t> &metadata)
     return res;
   }
 
-  case operation::sqrt:
+  case operation::pow:
   {
     ct_array_t s1 = calculate(node->operands[0], metadata);
     ct_array_t res;
@@ -429,23 +497,97 @@ ct_array_t calculate(astnode *node, std::vector<uint64_t> &metadata)
           using T = std::decay_t<decltype(a)>;
           if constexpr (std::is_same_v<T, ct::vector>)
           {
-            std::shared_ptr<ct::unary_operator> sqrt_ = std::make_shared<sqrt_t>();
-            ct::vector vec = ct::unary_expr(a, sqrt_);
+            std::shared_ptr<ct::unary_operator> pow_ = std::make_shared<pow_t>(node->arg);
+            ct::vector vec = ct::unary_expr(a, pow_);
             res = ct_array_t{vec};
           }
           else if constexpr (std::is_same_v<T, ct::matrix>)
           {
-            std::shared_ptr<ct::unary_operator> sqrt_ = std::make_shared<sqrt_t>();
-            ct::matrix mat = ct::unary_expr(a, sqrt_);
+            std::shared_ptr<ct::unary_operator> pow_ = std::make_shared<pow_t>(node->arg);
+            ct::matrix mat = ct::unary_expr(a, pow_);
             res = ct_array_t{mat};
           }
           else if constexpr (std::is_same_v<T, ct::scalar>)
           {
-            res = std::sqrt(a.get());
+            res = std::pow(a.get(), node->arg);
           }
           else if constexpr (std::is_same_v<T, double>)
           {
-            res = std::sqrt(a);
+            res = std::pow(a, node->arg);
+          }
+        },
+        s1);
+    if (node->store)
+    {
+      Server::insert(node->name, res);
+    }
+    return res;
+  }
+
+  case operation::log:
+  {
+    ct_array_t s1 = calculate(node->operands[0], metadata);
+    ct_array_t res;
+    std::visit(
+        [&](auto &a)
+        {
+          using T = std::decay_t<decltype(a)>;
+          if constexpr (std::is_same_v<T, ct::vector>)
+          {
+            std::shared_ptr<ct::unary_operator> log_ = std::make_shared<log_t>(node->arg);
+            ct::vector vec = ct::unary_expr(a, log_);
+            res = ct_array_t{vec};
+          }
+          else if constexpr (std::is_same_v<T, ct::matrix>)
+          {
+            std::shared_ptr<ct::unary_operator> log_ = std::make_shared<log_t>(node->arg);
+            ct::matrix mat = ct::unary_expr(a, log_);
+            res = ct_array_t{mat};
+          }
+          else if constexpr (std::is_same_v<T, ct::scalar>)
+          {
+            res = std::log(a.get()) / std::log(node->arg);
+          }
+          else if constexpr (std::is_same_v<T, double>)
+          {
+            res = std::log(a) / std::log(node->arg);
+          }
+        },
+        s1);
+    if (node->store)
+    {
+      Server::insert(node->name, res);
+    }
+    return res;
+  }
+
+  case operation::exp:
+  {
+    ct_array_t s1 = calculate(node->operands[0], metadata);
+    ct_array_t res;
+    std::visit(
+        [&](auto &a)
+        {
+          using T = std::decay_t<decltype(a)>;
+          if constexpr (std::is_same_v<T, ct::vector>)
+          {
+            std::shared_ptr<ct::unary_operator> exp_ = std::make_shared<exp_t>();
+            ct::vector vec = ct::unary_expr(a, exp_);
+            res = ct_array_t{vec};
+          }
+          else if constexpr (std::is_same_v<T, ct::matrix>)
+          {
+            std::shared_ptr<ct::unary_operator> exp_ = std::make_shared<exp_t>();
+            ct::matrix mat = ct::unary_expr(a, exp_);
+            res = ct_array_t{mat};
+          }
+          else if constexpr (std::is_same_v<T, ct::scalar>)
+          {
+            res = std::exp(a.get());
+          }
+          else if constexpr (std::is_same_v<T, double>)
+          {
+            res = std::exp(a);
           }
         },
         s1);

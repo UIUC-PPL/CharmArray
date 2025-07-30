@@ -21,7 +21,7 @@ enum class operation : uint64_t
   copy = 6,
   axpy = 7,
   axpy_multiplier = 8,
-  sqrt = 10,
+  pow = 10,
   greater = 11,
   lesser = 12,
   geq = 13,
@@ -31,7 +31,9 @@ enum class operation : uint64_t
   logical_and = 17,
   logical_or = 18,
   logical_not = 19,
-  where = 20
+  where = 20,
+  log = 21,
+  exp = 22
 };
 
 class astnode
@@ -39,6 +41,7 @@ class astnode
 public:
   bool store;
   bool is_scalar;
+  double arg;
   // FIXME double scalars fit into name, but should probably
   // handle this better
   uint64_t name;
@@ -81,7 +84,7 @@ astnode *decode(char *cmd)
     node->operands.push_back(opnode);
     cmd += operand_size;
   }
-
+  node->arg = extract<double>(cmd);
   return node;
 }
 
