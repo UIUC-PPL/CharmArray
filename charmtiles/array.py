@@ -325,9 +325,9 @@ class ndarray:
         return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
     
-    def exp(self, exp):
+    def exp(self):
         res = get_name()
-        cmd_buffer = ASTNode(res, OPCODES.get('exp'), [self], arg=exp)
+        cmd_buffer = ASTNode(res, OPCODES.get('exp'), [self])
         return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
     
