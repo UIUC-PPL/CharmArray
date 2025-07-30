@@ -197,8 +197,6 @@ class ndarray:
                               name=res, command_buffer=cmd_buffer)
 
     def __mul__(self, other):
-        if self.ndim > 0 or (isinstance(other, ndarray) and other.ndim > 0):
-            RuntimeError("Cannot multiply two arrays")
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('*'), [self, other])
         return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
@@ -208,10 +206,14 @@ class ndarray:
         return self * other
 
     def __truediv__(self, other):
-        if self.ndim > 0 or other.ndim > 0:
-            RuntimeError("Cannot divide two arrays")
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('/'), [self, other])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def __rtruediv__(self, other):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('/'), [1., self/other])
         return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
 

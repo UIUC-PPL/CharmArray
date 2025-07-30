@@ -332,33 +332,47 @@ ct_array_t calculate(astnode *node, std::vector<uint64_t> &metadata)
     }
     return res;
   }
-  // case operation::mul: {
-  //     ct_array_t s1 = calculate(node->operands[0], metadata);
-  //     ct_array_t s2 = calculate(node->operands[1], metadata);
-  //     ct_array_t res;
+  case operation::mul:
+  {
+    ct_array_t s1 = calculate(node->operands[0], metadata);
+    ct_array_t s2 = calculate(node->operands[1], metadata);
+    ct_array_t res;
 
-  //     std::visit(
-  //         [&](auto& x, auto& y) {
-  //             using T = std::decay_t<decltype(x)>;
-  //             using V = std::decay_t<decltype(y)>;
-  //             if constexpr(std::is_same_v<T, ct::scalar> && std::is_same_v<V, ct::scalar>)
-  //                 res = x.get() * y.get();
-  //             else if constexpr(std::is_same_v<T, double> && !std::is_same_v<V, ct::scalar>)
-  //                 res = x * y;
-  //             else if constexpr(std::is_same_v<V, ct::scalar> && !std::is_same_v<T, ct::scalar>)
-  //                 res = y.get() * x;
-  //             else if constexpr(std::is_same_v<V, double> && !std::is_same_v<T, ct::scalar>)
-  //                 res = y * x;
-  //             else
-  //                 CmiAbort("Operation not permitted");
-  //         }, s1, s2);
+    std::visit(
+        [&](auto &x, auto &y)
+        {
+          using T = std::decay_t<decltype(x)>;
+          using V = std::decay_t<decltype(y)>;
+          if constexpr ((std::is_same_v<T, ct::scalar> && std::is_same_v<V, ct::scalar>))
+          {
+            res = x.get() * y.get();
+          }
+          else if constexpr ((std::is_same_v<T, ct::scalar>))
+          {
+            res = x.get() * y;
+          }
+          else if constexpr ((std::is_same_v<V, ct::scalar>))
+          {
+            res = x * y.get();
+          }
+          else if constexpr ((std::is_same_v<T, ct::vector> && std::is_same_v<V, ct::matrix>) ||
+                             (std::is_same_v<T, ct::matrix> && std::is_same_v<V, ct::vector>))
+          {
+            CkAbort("Vector + Matrix operations not supported");
+          }
+          else
+          {
+            res = x * y;
+          }
+        },
+        s1, s2);
 
-  //     if (node->store)
-  //     {
-  //         Server::insert(node->name, res);
-  //     }
-  //     return res;
-  // }
+    if (node->store)
+    {
+      Server::insert(node->name, res);
+    }
+    return res;
+  }
   case operation::div:
   {
     ct_array_t s1 = calculate(node->operands[0], metadata);
@@ -389,7 +403,6 @@ ct_array_t calculate(astnode *node, std::vector<uint64_t> &metadata)
           }
           else
           {
-            // Everything else should work with the normal + operator
             res = x / y;
           }
         },
