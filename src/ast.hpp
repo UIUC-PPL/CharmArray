@@ -33,7 +33,8 @@ enum class operation : uint64_t
   logical_not = 19,
   where = 20,
   log = 21,
-  exp = 22
+  exp = 22,
+  abs = 23
 };
 
 class astnode

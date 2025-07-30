@@ -12,7 +12,7 @@ epoch = 0
 OPCODES = {'+': 1, '-': 2, '*': 3 ,'/': 4, '@': 5, 'copy': 6, 'axpy': 7,
            'axpy_multiplier': 8, 'setitem': 9, 'pow': 10, '>': 11, 
            '<': 12, '>=': 13, '<=': 14, '==': 15, '!=': 16, '&': 17, 
-           '|': 18, '!':19, 'where':20, 'log': 21, 'exp': 22}
+           '|': 18, '!':19, 'where':20, 'log': 21, 'exp': 22, 'abs': 23}
 
 INV_OPCODES = {v: k for k, v in OPCODES.items()}
 

@@ -156,6 +156,36 @@ public:
   }
 };
 
+class abs_t : public ct::unary_operator
+{
+public:
+  abs_t() = default;
+  ~abs_t() {}
+
+  using ct::unary_operator::unary_operator;
+
+  inline double operator()(std::size_t index, double value) override final
+  {
+    return std::abs(value);
+  }
+
+  inline double operator()(std::size_t rows, std::size_t cols, double value) override final
+  {
+    return std::abs(value);
+  }
+
+  PUPable_decl(abs_t);
+  abs_t(CkMigrateMessage *m)
+      : ct::unary_operator(m)
+  {
+  }
+
+  void pup(PUP::er &p) final
+  {
+    ct::unary_operator::pup(p);
+  }
+};
+
 class Server
 {
 public:
@@ -588,6 +618,43 @@ ct_array_t calculate(astnode *node, std::vector<uint64_t> &metadata)
           else if constexpr (std::is_same_v<T, double>)
           {
             res = std::exp(a);
+          }
+        },
+        s1);
+    if (node->store)
+    {
+      Server::insert(node->name, res);
+    }
+    return res;
+  }
+
+  case operation::abs:
+  {
+    ct_array_t s1 = calculate(node->operands[0], metadata);
+    ct_array_t res;
+    std::visit(
+        [&](auto &a)
+        {
+          using T = std::decay_t<decltype(a)>;
+          if constexpr (std::is_same_v<T, ct::vector>)
+          {
+            std::shared_ptr<ct::unary_operator> abs_ = std::make_shared<abs_t>();
+            ct::vector vec = ct::unary_expr(a, abs_);
+            res = ct_array_t{vec};
+          }
+          else if constexpr (std::is_same_v<T, ct::matrix>)
+          {
+            std::shared_ptr<ct::unary_operator> abs_ = std::make_shared<abs_t>();
+            ct::matrix mat = ct::unary_expr(a, abs_);
+            res = ct_array_t{mat};
+          }
+          else if constexpr (std::is_same_v<T, ct::scalar>)
+          {
+            res = std::abs(a.get());
+          }
+          else if constexpr (std::is_same_v<T, double>)
+          {
+            res = std::abs(a);
           }
         },
         s1);

@@ -4,6 +4,7 @@ mainmodule server
     PUPable pow_t;
     PUPable log_t;
     PUPable exp_t;
+    PUPable abs_t;
     
     mainchare Main
     {
