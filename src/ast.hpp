@@ -34,7 +34,9 @@ enum class operation : uint64_t
   where = 20,
   log = 21,
   exp = 22,
-  abs = 23
+  abs = 23,
+  any = 24,
+  all = 25
 };
 
 class astnode

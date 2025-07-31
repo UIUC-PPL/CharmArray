@@ -1087,6 +1087,64 @@ ct_array_t calculate(astnode *node, std::vector<uint64_t> &metadata)
     return res;
   }
 
+  case operation::any:
+  {
+    ct_array_t s1 = calculate(node->operands[0], metadata);
+    ct_array_t res;
+
+    std::visit(
+        [&](auto &x)
+        {
+          using T = std::decay_t<decltype(x)>;
+          if constexpr ((std::is_same_v<T, ct::vector> || std::is_same_v<T, ct::matrix>))
+          {
+            res = static_cast<double>(x.any());
+          }
+          else if constexpr ((std::is_same_v<T, ct::scalar>))
+          {
+            res = static_cast<double>(x.get());
+          }
+          else
+          {
+            res = static_cast<double>(x);
+          }
+        },
+        s1);
+
+    if (node->store)
+      Server::insert(node->name, res);
+    return res;
+  }
+
+  case operation::all:
+  {
+    ct_array_t s1 = calculate(node->operands[0], metadata);
+    ct_array_t res;
+
+    std::visit(
+        [&](auto &x)
+        {
+          using T = std::decay_t<decltype(x)>;
+          if constexpr ((std::is_same_v<T, ct::vector> || std::is_same_v<T, ct::matrix>))
+          {
+            res = static_cast<double>(x.all());
+          }
+          else if constexpr ((std::is_same_v<T, ct::scalar>))
+          {
+            res = static_cast<double>(x.get());
+          }
+          else
+          {
+            res = static_cast<double>(x);
+          }
+        },
+        s1);
+
+    if (node->store)
+      Server::insert(node->name, res);
+    return res;
+  }
+
   default:
   {
     CmiAbort("Operation not implemented8");

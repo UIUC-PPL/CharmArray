@@ -342,4 +342,15 @@ class ndarray:
         cmd_buffer = ASTNode(res, OPCODES.get('where'), [self, other, third])
         return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
+    
+    def any(self):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('any'), [self])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    def all(self):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('all'), [self])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
 
