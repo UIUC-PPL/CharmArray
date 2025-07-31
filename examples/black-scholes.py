@@ -6,7 +6,8 @@ import time
 import numpy as np
 import gc
 #from ctypes import c_long
-import sys
+# import argparse for command-line parsing
+import argparse
 
 set_max_depth(1)
 
@@ -37,19 +38,16 @@ def cnd(d):
     A5 = 1.330274429
     RSQRT2PI = 0.39894228040143267793994605993438
 
-    K = 1.0 / (1.0 + 0.2316419 * ndarray.absolute(d))
-
-    cnd = (
-        RSQRT2PI
-        * ndarray.exp(-0.5 * d * d)
-        * (K * (A1 + K * (A2 + K * (A3 + K * (A4 + K * A5)))))
+    abs_d = ndarray.absolute(d)
+    K = 1.0 / (1.0 + 0.2316419 * abs_d)
+    cnd_val = RSQRT2PI * ndarray.exp(-0.5 * d * d) * (
+        K * (A1 + K * (A2 + K * (A3 + K * (A4 + K * A5))))
     )
-
-    return ndarray.where(d > 0, 1.0 - cnd, cnd)
+    return ndarray.where(d > 0, 1.0 - cnd_val, cnd_val)
 
 def black_scholes(S, X, T, R, V):
     sqrt_t = ndarray.sqrt(T)
-    d1 = ndarray.log(S / X) + (R + 0.5 * V * V) * T / (V * sqrt_t)
+    d1 = (ndarray.log(S / X) + (R + 0.5 * V * V) * T) / (V * sqrt_t)
     d2 = d1 - V * sqrt_t
     cnd_d1 = cnd(d1)
     cnd_d2 = cnd(d2)
@@ -70,16 +68,12 @@ def run_black_scholes(N, D=np.float64):
     total = (end_time - start_time) * 1000  # Convert to milliseconds
     print("Elapsed Time: " + str(total) + " ms")
 
-def f():
-    if len(sys.argv) > 1:
-        N = int(sys.argv[1])
-        print(f"Running with N = {N}")
-    else:
-        print("No arguments provided, using default N = 10")
-        N = 10
-    run_black_scholes(N)
-
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="Black-Scholes benchmark")
+    parser.add_argument("num", nargs="?", type=int, default=1,
+                        help="Number of thousands of options (default: 1 => 1K)")
+    args = parser.parse_args()
+
     connect("192.168.0.250", 10000)
-    s = f()
+    run_black_scholes(args.num)
     sync()

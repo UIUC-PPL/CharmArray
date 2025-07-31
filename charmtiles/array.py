@@ -249,7 +249,6 @@ class ndarray:
         for name, arr in validated_arrays.items():
             reply_size += 8 + 8 * arr.ndim
         if not debug:
-            print("Deletion size :", deletion_buffer_size)
             cmd = to_bytes(deletion_buffer_size, 'I') + deletion_buffer + cmd
             cmd = to_bytes(get_epoch(), 'i') + to_bytes(len(cmd), 'I') + cmd
             send_command_async(Handlers.operation_handler, cmd)
@@ -339,7 +338,7 @@ class ndarray:
     
     def where(self, other, third):
         res = get_name()
-        cmd_buffer = ASTNode(res, OPCODES.get('where'), [self, other, third])
+        cmd_buffer = ASTNode(res, OPCODES.get('where'), [other, third, self])
         return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
     
