@@ -213,8 +213,8 @@ void Main::execute_creation(int epoch, int size, char *cmd)
     ct_array_t res;
     if (has_buf)
     {
-      // double* init_buf = (double*) cmd;
-      // res = ct::vector(size, init_buf);
+      double *init_buf = (double *)cmd;
+      res = ct::from_vector(init_buf, size);
     }
     else if (has_init)
     {
@@ -236,8 +236,8 @@ void Main::execute_creation(int epoch, int size, char *cmd)
     ct_array_t res;
     if (has_buf)
     {
-      // double* init_buf = (double*) cmd;
-      // res = ct::matrix(size1, size2, init_buf);
+      double *init_buf = (double *)cmd;
+      res = ct::from_matrix(init_buf, size1, size2);
     }
     else if (has_init)
     {
