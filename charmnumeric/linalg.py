@@ -2,9 +2,9 @@ import sys
 import struct
 import numpy as np
 from pyccs import Server
-from charmtiles.ccs import OPCODES, get_name, send_command, Handlers
-from charmtiles.array import create_ndarray
-from charmtiles.ast import ASTNode
+from charmnumeric.ccs import OPCODES, get_name, send_command, Handlers
+from charmnumeric.array import create_ndarray
+from charmnumeric.ast import ASTNode
 
 
 def axpy(a, x, y, multiplier=None):

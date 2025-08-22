@@ -3,8 +3,8 @@ import warnings
 import numpy as np
 import weakref
 import sys
-from charmtiles.ast import get_max_depth, ASTNode
-from charmtiles.ccs import to_bytes, from_bytes, send_command_raw, send_command, \
+from charmnumeric.ast import get_max_depth, ASTNode
+from charmnumeric.ccs import to_bytes, from_bytes, send_command_raw, send_command, \
     send_command_async, connect, get_creation_command, \
     get_epoch, get_name, get_fetch_command, Handlers, OPCODES, is_debug
 
