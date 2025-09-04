@@ -1,7 +1,7 @@
-from charmtiles.array import connect, ndarray
-import charmtiles.linalg as lg
-from charmtiles.ccs import sync
-from charmtiles.ast import set_max_depth
+from charmnumeric.array import connect, ndarray
+import charmnumeric.linalg as lg
+from charmnumeric.ccs import sync
+from charmnumeric.ast import set_max_depth
 import numpy as np
 import gc
 #from ctypes import c_long

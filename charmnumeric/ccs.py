@@ -1,7 +1,7 @@
 import struct
 import atexit
 from pyccs import Server
-from charmtiles import array
+from charmnumeric import array
 
 debug = False
 server = None
@@ -69,7 +69,7 @@ def connect(server_ip, server_port):
         atexit.register(disconnect)
 
 def disconnect():
-    from charmtiles.array import deletion_buffer, deletion_buffer_size
+    from charmnumeric.array import deletion_buffer, deletion_buffer_size
     global client_id, deletion_buffer, deletion_buffer_size
     if deletion_buffer_size > 0:
         cmd = to_bytes(len(deletion_buffer), 'I') + deletion_buffer
