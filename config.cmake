@@ -1,0 +1,12 @@
+set(CHARM_DIR "/home/shogo/master/Kale/charm/netlrts-linux-x86_64")
+set(BASE_DIR "/home/shogo/master/Kale/LibCharmtyles")
+set(EIGEN_DIR "/usr/include/eigen3")
+set(CUDA_DIR  "/path/to/CUDA/directory")
+set(KOKKOS_DIR "/home/shogo/master/Kale/LibCharmtyles/kokkos/install")
+
+set(CHARMC "${CHARM_DIR}/bin/charmc")
+set(CPU_OPTS "-c++-option -std=c++20 -O3 -march=native -DNDEBUG")
+set(GPU_OPTS "-std=c++20 -O3 -march=native -DNDEBUG")
+set(GPU_LINK_OPTS -O3 -language charm++ -L${KOKKOS_DIR}/lib64 -lkokkoscore -L${CUDA_DIR} -lcuda -lcudart)
+set(LD_OPTS "")
+set(INCS "-I${BASE_DIR}")

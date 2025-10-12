@@ -244,7 +244,7 @@ class ndarray:
         if self.valid:
             return
         validated_arrays = {self.name : self}
-        cmd = self.command_buffer.get_command(validated_arrays, self.ndim, self.shape)
+        cmd = self.command_buffer.get_command(validated_arrays)
         reply_size = 0
         for name, arr in validated_arrays.items():
             reply_size += 8 + 8 * arr.ndim
@@ -290,37 +290,37 @@ class ndarray:
                               name=res, command_buffer=cmd_buffer)
     def sqrt(self):
         res = get_name()
-        cmd_buffer = ASTNode(res, OPCODES.get('pow'), [self], args=[0.5])
+        cmd_buffer = ASTNode(res, OPCODES.get('pow'), [self], arg=0.5)
         return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
     
     def cbrt(self):
         res = get_name()
-        cmd_buffer = ASTNode(res, OPCODES.get('pow'), [self], args=[1/3])
+        cmd_buffer = ASTNode(res, OPCODES.get('pow'), [self], arg=1/3)
         return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
     
     def pow(self, exponent):
         res = get_name()
-        cmd_buffer = ASTNode(res, OPCODES.get('pow'), [self], args=[exponent])
+        cmd_buffer = ASTNode(res, OPCODES.get('pow'), [self], arg=exponent)
         return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
     
     def log(self, base=np.e):
         res = get_name()
-        cmd_buffer = ASTNode(res, OPCODES.get('log'), [self], args=[base])
+        cmd_buffer = ASTNode(res, OPCODES.get('log'), [self], arg=base)
         return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
     
     def log10(self):
         res = get_name()
-        cmd_buffer = ASTNode(res, OPCODES.get('log'), [self], args=[10])
+        cmd_buffer = ASTNode(res, OPCODES.get('log'), [self], arg=10)
         return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
     
     def log2(self):
         res = get_name()
-        cmd_buffer = ASTNode(res, OPCODES.get('log'), [self], args=[2])
+        cmd_buffer = ASTNode(res, OPCODES.get('log'), [self], arg=2)
         return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
     

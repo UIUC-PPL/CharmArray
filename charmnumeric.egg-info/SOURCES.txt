@@ -1,0 +1,12 @@
+README.rst
+setup.py
+charmnumeric/__init__.py
+charmnumeric/array.py
+charmnumeric/ast.py
+charmnumeric/ccs.py
+charmnumeric/linalg.py
+charmnumeric.egg-info/PKG-INFO
+charmnumeric.egg-info/SOURCES.txt
+charmnumeric.egg-info/dependency_links.txt
+charmnumeric.egg-info/requires.txt
+charmnumeric.egg-info/top_level.txt

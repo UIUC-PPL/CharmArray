@@ -1,0 +1,12 @@
+numpy
+charm4py
+
+[dev]
+sphinx
+pytest
+
+[docs]
+sphinx
+
+[tests]
+pytest
