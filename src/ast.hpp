@@ -66,21 +66,35 @@ template<typename tensorType, typename tensorAstNodeType>
 std::vector<tensorAstNodeType> faster_tortoise(char *cmd)
 {
   uint8_t dims = extract<uint8_t>(cmd);
+  ckout << "DIMS> " << dims << endl;
+
   std::vector<uint64_t> shape; shape.reserve(2);
-  for(uint8_t i = 0; i < dims; i++)
-    shape.push_back(extract<uint64_t>(cmd));
 
   if (dims == 0) {
+    if constexpr (std::is_same_v<tensorType, ct::vector>) {
+      shape.push_back(extract<uint64_t>(cmd));
+    } else if constexpr (std::is_same_v<tensorType, ct::matrix>) {
+      shape.push_back(extract<uint64_t>(cmd));
+      shape.push_back(extract<uint64_t>(cmd));
+    }
     double value = extract<double>(cmd);
+    ckout << "VAL> " << value << endl;
     tensorAstNodeType temp_node(0, ctop::broadcast, value, shape);
     return {temp_node};
   }
 
+  for(uint8_t i = 0; i < dims; i++)
+    shape.push_back(extract<uint64_t>(cmd));
+  ckout << "SHAPE> " << shape[0] << endl;
+  
+
   ctop opcode = to_ctop(extract<uint32_t>(cmd));
   bool store  = extract<bool>(cmd);
   uint64_t tensorID = extract<uint64_t>(cmd);
+  ckout << "TENSORID> " << tensorID << endl;
 
   if (opcode == ctop::noop) {
+    ckout << "NO-OP" << endl;
     const auto& tmp = std::get<tensorType>(lookup(tensorID));
     return tmp();
   }
@@ -95,6 +109,7 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd)
   std::vector<tensorAstNodeType> ast;
 
   uint8_t  numOperands = extract<uint8_t>(cmd);
+  ckout << "NUM OPERANDS> " << numOperands << endl;
 
   if(numOperands <= 2) {
     uint32_t operand_size = extract<uint32_t>(cmd);
@@ -115,9 +130,11 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd)
       rootNode.right_ = left.size() + 1;
       right_size = right.size();
     }
+    ckout << "HEREH" << endl;
     ast.reserve(left.size() + right_size + 1);
     ast.emplace_back(rootNode);
     std::copy(left.begin(), left.end(), std::back_inserter(ast));
+    ckout << "THERE" << endl;
 
     if (right_size)
         std::copy(right.begin(), right.end(), std::back_inserter(ast));

@@ -143,8 +143,8 @@ void Main::execute_operation(int epoch, int size, char *cmd)
   }
   CkPrintf("Memory usage after %u deletions is %f MB\n", num_deletions, CmiMemoryUsage() / (1024. * 1024.));
 
-  if(peek<uint8_t>(cmd) == 1)      faster_tortoise<ct::vector, ct::vec_impl::vec_node>(cmd);
-  else if(peek<uint8_t>(cmd) == 2) faster_tortoise<ct::matrix, ct::mat_impl::mat_node>(cmd);
+  if      (peek<uint8_t>(cmd) == 1) faster_tortoise<ct::vector, ct::vec_impl::vec_node>(cmd);
+  else if (peek<uint8_t>(cmd) == 2) faster_tortoise<ct::matrix, ct::mat_impl::mat_node>(cmd);
 }
 
 void Main::execute_command(int epoch, uint8_t kind, int size, char *cmd)

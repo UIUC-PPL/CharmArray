@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "*.sage": "python",
+        "vector": "cpp",
+        "iosfwd": "cpp"
+    }
+}

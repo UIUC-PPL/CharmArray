@@ -51,6 +51,7 @@ class ASTNode(object):
             cmd += to_bytes(_shape, 'L')
 
         if self.opcode == 0:
+            print(self.operands[0].name)
             cmd += to_bytes(0, 'I') + to_bytes(False, '?') + to_bytes(self.operands[0].name, 'L')
             return cmd
 
@@ -60,6 +61,7 @@ class ASTNode(object):
             cmd += to_bytes(arg, 'd')
 
         cmd += to_bytes(len(self.operands), 'B')
+        print(len(self.operands))
         for op in self.operands:
             if isinstance(op, ndarray):
                 if op.name in validated_arrays:
@@ -72,13 +74,15 @@ class ASTNode(object):
                     opcmd = op.command_buffer.get_command(validated_arrays, op.ndim, op.shape, save=save_op)
                     if not op.valid and save_op:
                         validated_arrays[op.name] = op
-            elif isinstance(op, float):
+            elif isinstance(op, float) or isinstance(op, int):
+                print("SCALAR OP> ", op)
                 opcmd = to_bytes(0, 'B')
                 for _shape in shape:
                     opcmd += to_bytes(_shape, 'L')
-                opcmd += to_bytes(op, 'd')
+                opcmd += to_bytes(float(op), 'd')
             cmd += to_bytes(len(opcmd), 'I')
             cmd += opcmd
+        print(cmd)
         return cmd
 
     def plot_graph(self, validated_arrays={}, G=None, node_map={},
