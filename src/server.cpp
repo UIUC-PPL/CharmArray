@@ -139,12 +139,12 @@ void Main::execute_operation(int epoch, int size, char *cmd)
   for (int i = 0; i < num_deletions; i++)
   {
     ct_name_t name = extract<ct_name_t>(cmd);
-    Server::remove(name);
+    remove(name);
   }
   CkPrintf("Memory usage after %u deletions is %f MB\n", num_deletions, CmiMemoryUsage() / (1024. * 1024.));
 
   if(peek<uint8_t>(cmd) == 1)      faster_tortoise<ct::vector, ct::vec_impl::vec_node>(cmd);
-  else if(peek<uint8_t>(cmd) == 2) faster_tortoise<ct::matrix, ct::vec_impl::mat_node>(cmd);
+  else if(peek<uint8_t>(cmd) == 2) faster_tortoise<ct::matrix, ct::mat_impl::mat_node>(cmd);
 }
 
 void Main::execute_command(int epoch, uint8_t kind, int size, char *cmd)
@@ -222,7 +222,7 @@ void Main::execute_creation(int epoch, int size, char *cmd)
     {
       res = ct::vector(size);
     }
-    Server::insert(res_name, std::move(res));
+    insert(res_name, std::move(res));
     break;
   }
   case 2:
@@ -245,7 +245,7 @@ void Main::execute_creation(int epoch, int size, char *cmd)
     {
       res = ct::matrix(size1, size2);
     }
-    Server::insert(res_name, std::move(res));
+    insert(res_name, std::move(res));
     break;
   }
   default:
@@ -259,7 +259,7 @@ void Main::execute_creation(int epoch, int size, char *cmd)
 void Main::execute_fetch(int epoch, int size, char *cmd)
 {
   ct_name_t name = extract<ct_name_t>(cmd);
-  ct_array_t &arr = Server::lookup(name);
+  ct_array_t &arr = lookup(name);
   char *reply = nullptr;
   int reply_size = 0;
   std::visit(
@@ -301,7 +301,7 @@ void Main::execute_delete(int epoch, int size, char *cmd)
   for (int i = 0; i < num_deletions; i++)
   {
     ct_name_t name = extract<ct_name_t>(cmd);
-    Server::remove(name);
+    remove(name);
   }
 }
 

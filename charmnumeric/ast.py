@@ -36,10 +36,10 @@ class ASTNode(object):
 
     ######################################################################################################################################
     # Encoding = | dim | shape | opcode | save_op | ID | NumArgs | Args | NumOperands | OperandEncodingSize | RecursiveOperandEncoding | #
-    #            |  8  |  64   |   32   |   1     | 32 |   32    |  64  |     8       |         32          | ........................ | #
+    #            |  8  |  64   |   32   |   1     | 64 |   32    |  64  |     8       |         32          | ........................ | #
     # NB: If opcode is 0, the encoding is limited to ID                                                                                  #
-    # Encoding = | dim |  val  |                                                                                                         #
-    #            |  8  |  64   |                                                                                                         #
+    # Encoding = | dim | shape |  val  |                                                                                                 #
+    #            |  8  |  64   |   64  |                                                                                                 #
     # NB: Latter encoding for double constants                                                                                           #
     ######################################################################################################################################
     def get_command(self, validated_arrays, ndim, shape, save=True):
@@ -51,14 +51,15 @@ class ASTNode(object):
             cmd += to_bytes(_shape, 'L')
 
         if self.opcode == 0:
-            cmd += to_bytes(0, 'I') + to_bytes(False, '?') + to_bytes(self.operands[0].name, 'I')
+            cmd += to_bytes(0, 'I') + to_bytes(False, '?') + to_bytes(self.operands[0].name, 'L')
             return cmd
 
-        cmd += to_bytes(self.opcode, 'I') + to_bytes(save, '?') + to_bytes(self.name, 'I') + to_bytes(len(self.operands), 'B')
+        cmd += to_bytes(self.opcode, 'I') + to_bytes(save, '?') + to_bytes(self.name, 'L')
         cmd += to_bytes(len(self.args), 'I')
         for arg in self.args:
             cmd += to_bytes(arg, 'd')
 
+        cmd += to_bytes(len(self.operands), 'B')
         for op in self.operands:
             if isinstance(op, ndarray):
                 if op.name in validated_arrays:
@@ -72,7 +73,10 @@ class ASTNode(object):
                     if not op.valid and save_op:
                         validated_arrays[op.name] = op
             elif isinstance(op, float):
-                opcmd = to_bytes(0, 'B') + to_bytes(op, 'd')
+                opcmd = to_bytes(0, 'B')
+                for _shape in shape:
+                    opcmd += to_bytes(_shape, 'L')
+                opcmd += to_bytes(op, 'd')
             cmd += to_bytes(len(opcmd), 'I')
             cmd += opcmd
         return cmd

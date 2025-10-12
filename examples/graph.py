@@ -11,8 +11,8 @@ def f():
     v = ndarray(1, 10, np.float64, init_value=20)
     b = ndarray(1, 10, np.float64, init_value=10)
     c = ndarray(1, 10, np.float64, init_value=30)
-    g = v + c
-    k = g + b
+    g = v + b
+    k = g + c
     # k = g + 2 * c - 3 * v
     l = k.get()
     print(l)

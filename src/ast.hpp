@@ -8,6 +8,27 @@
 #include <vector>
 #include <cstring>
 
+using ctop = ct::util::Operation;
+using ct_name_t = uint64_t;
+using ct_array_t = std::variant<ct::scalar, ct::vector, ct::matrix, double>;
+std::unordered_map<ct_name_t, ct_array_t> symbol_table;
+
+inline static void insert(ct_name_t name, ct_array_t arr) noexcept {
+  CkPrintf("Created array %" PRIu64 " on server\n", name);
+  symbol_table[name] = std::move(arr);
+}
+
+inline static void remove(ct_name_t name) noexcept {
+  symbol_table.erase(name);
+}
+
+static ct_array_t &lookup(ct_name_t name) {
+  auto find = symbol_table.find(name);
+  if (find == std::end(symbol_table))
+    CmiAbort("Symbol %i not found", name);
+  return find->second;
+}
+
 template <typename T>
 inline T extract(char *&msg) noexcept {
   T arg = *(reinterpret_cast<T *>(msg));
@@ -20,8 +41,7 @@ inline T peek(char* &msg) noexcept {
   return *(reinterpret_cast<T*>(msg));
 }
 
-ct::util::Operation inline to_ctop(uint64_t opcode) noexcept {
-  using ctop = ct::util::Operation;
+ctop inline to_ctop(uint64_t opcode) noexcept {
   switch (opcode) {
     case 0:  return ctop::noop;
     case 1:  return ctop::add;
@@ -46,25 +66,24 @@ template<typename tensorType, typename tensorAstNodeType>
 std::vector<tensorAstNodeType> faster_tortoise(char *cmd)
 {
   uint8_t dims = extract<uint8_t>(cmd);
-
-  if (dims == 0) {
-    double value = extract<double>(cmd);
-    tensorAstNodeType temp_node{0, ct::util::Operation::broadcast, value, shape};
-    return {temp_node};
-  }
-
   std::vector<uint64_t> shape; shape.reserve(2);
   for(uint8_t i = 0; i < dims; i++)
     shape.push_back(extract<uint64_t>(cmd));
 
-  ct::util::Operation opcode = to_ctop(extract<uint32_t>(cmd));
-  if (opcode == ct::util::Operation::noop) {
-    const auto& tmp = std::get<1>(Server::lookup(extract<uint64_t>(cmd)));
-    return tmp();
+  if (dims == 0) {
+    double value = extract<double>(cmd);
+    tensorAstNodeType temp_node(0, ctop::broadcast, value, shape);
+    return {temp_node};
   }
 
+  ctop opcode = to_ctop(extract<uint32_t>(cmd));
   bool store  = extract<bool>(cmd);
-  uint32_t tensorID = extract<uint32_t>(cmd);
+  uint64_t tensorID = extract<uint64_t>(cmd);
+
+  if (opcode == ctop::noop) {
+    const auto& tmp = std::get<tensorType>(lookup(tensorID));
+    return tmp();
+  }
 
   // Args for custom unops/binops
   uint32_t numArgs  = extract<uint32_t>(cmd);
@@ -79,17 +98,17 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd)
 
   if(numOperands <= 2) {
     uint32_t operand_size = extract<uint32_t>(cmd);
-    std::vector<tensorAstNodeType> left = faster_tortoise<tensorAstNodeType>(cmd);
+    std::vector<tensorAstNodeType> left = faster_tortoise<tensorType, tensorAstNodeType>(cmd);
     cmd += operand_size;
     operand_size = extract<uint32_t>(cmd);
-    std::vector<tensorAstNodeType> right = faster_tortoise<tensorAstNodeType>(cmd);
+    std::vector<tensorAstNodeType> right = faster_tortoise<tensorType, tensorAstNodeType>(cmd);
     cmd += operand_size;
 
     rootNode.left_ = 1;
     size_t right_size;
-    if (op == ct::util::Operation::unary_expr  ||
-        op == ct::util::Operation::logical_not ||
-        op == ct::util::Operation::custom_expr) {
+    if (opcode == ctop::unary_expr  ||
+        opcode == ctop::logical_not ||
+        opcode == ctop::custom_expr) {
       rootNode.right_ = -1;
       right_size = 0;
     } else {
@@ -135,13 +154,13 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd)
     }
   } else {
     uint32_t operand_size = extract<uint32_t>(cmd);
-    std::vector<tensorAstNodeType> left = faster_tortoise<tensorAstNodeType>(cmd);
+    std::vector<tensorAstNodeType> left = faster_tortoise<tensorType, tensorAstNodeType>(cmd);
     cmd += operand_size;
     operand_size = extract<uint32_t>(cmd);
-    std::vector<tensorAstNodeType> right = faster_tortoise<tensorAstNodeType>(cmd);
+    std::vector<tensorAstNodeType> right = faster_tortoise<tensorType, tensorAstNodeType>(cmd);
     cmd += operand_size;
     operand_size = extract<uint32_t>(cmd);
-    std::vector<tensorAstNodeType> ter = faster_tortoise<tensorAstNodeType>(cmd);
+    std::vector<tensorAstNodeType> ter = faster_tortoise<tensorType, tensorAstNodeType>(cmd);
     cmd += operand_size;
 
     rootNode.left_ = 1;
@@ -191,7 +210,9 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd)
 
   if (store) {
     tensorType tensor(ast);
-    Server::insert(tensorID, std::move(tensor));
+    const auto& tensorNode = tensor();
+    insert(tensorID, std::move(tensor));
+    return tensorNode;
   }
   return ast;
 }

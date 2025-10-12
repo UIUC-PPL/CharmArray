@@ -2,10 +2,7 @@
 
 #include "server.decl.h"
 
-using ct_name_t = uint64_t;
-using ct_array_t = std::variant<ct::scalar, ct::vector, ct::matrix, double>;
 using buffer_t = std::tuple<int, uint8_t, char *>;
-std::unordered_map<ct_name_t, ct_array_t> symbol_table;
 std::stack<uint8_t> client_ids;
 
 CProxy_Main main_proxy;
@@ -188,20 +185,6 @@ public:
       client_ids.push((uint8_t)i);
   }
 
-  inline static void insert(ct_name_t name, ct_array_t arr)
-  {
-    CkPrintf("Created array %" PRIu64 " on server\n", name);
-    symbol_table[name] = std::move(arr);
-  }
-
-  inline static void remove(ct_name_t name)
-  {
-    symbol_table.erase(name);
-#ifndef NDEBUG
-    CkPrintf("Deleted array %" PRIu64 " on server\n", name);
-#endif
-  }
-
   inline static uint8_t get_client_id()
   {
     if (client_ids.empty())
@@ -209,22 +192,6 @@ public:
     uint8_t client_id = client_ids.top();
     client_ids.pop();
     return client_id;
-  }
-
-  static ct_array_t &lookup(ct_name_t name)
-  {
-    auto find = symbol_table.find(name);
-    if (find == std::end(symbol_table))
-    {
-#ifndef NDEBUG
-      CkPrintf("Active symbols: ");
-      for (auto it : symbol_table)
-        CkPrintf("%" PRIu64 ", ", it.first);
-      CkPrintf("\n");
-#endif
-      CmiAbort("Symbol %i not found", name);
-    }
-    return find->second;
   }
 };
 
