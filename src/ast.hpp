@@ -42,6 +42,17 @@ inline T peek(char* &msg) noexcept {
   return *(reinterpret_cast<T*>(msg));
 }
 
+std::pair<uint8_t, uint64_t> getMatmulOperand(char* cmd) {
+  uint8_t dim = extract<uint8_t>(cmd);
+  if (dim < 1 || dim > 2) CmiAbort("Matmuls not supported with dimension%" PRIu8 "", dim);
+  cmd += dim * sizeof(uint64_t);
+  uint32_t opcode = extract<uint32_t>(cmd);
+  if (opcode) CmiAbort("Matmuls not supported with rvalues");
+  cmd += sizeof(bool);
+  uint64_t tensorID = extract<uint64_t>(cmd);
+  return std::make_pair<uint8_t, uint64_t>(dim, tensorID);
+}
+
 ctop inline to_ctop(uint64_t opcode) noexcept {
   switch (opcode) {
     case 0:  return ctop::noop;
@@ -49,6 +60,7 @@ ctop inline to_ctop(uint64_t opcode) noexcept {
     case 2:  return ctop::sub;
     case 3:  return ctop::multiply;
     case 4:  return ctop::divide;
+    case 5:  return ctop::matmul;
     case 11: return ctop::greater;
     case 12: return ctop::lesser;
     case 13: return ctop::geq;
@@ -102,7 +114,6 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd)
   ckout << "TENSORID> " << tensorID << endl;
 
   if (opcode == 0) {
-    ckout << "NO-OP" << endl;
     const auto& tmp = std::get<tensorType>(lookup(tensorID));
     return tmp();
   }
@@ -125,6 +136,63 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd)
   uint8_t  numOperands = extract<uint8_t>(cmd);
   ckout << "NUM OPERANDS> " << numOperands << endl;
 
+  // when we encounter a matmul, we treat it as a :
+  // 1. a dot product returning a scalar if both the operands are vectors
+  // 2. a dot product returning a vector if one operand is a matrix and the other a vector
+  // 3. a gemm returning a matrix if both the operands are matrices
+  if (ctopcode == ctop::matmul) {
+    uint32_t operand_size = extract<uint32_t>(cmd);
+    std::pair<uint8_t, uint64_t> xOperandInfo = getMatmulOperand(cmd);
+    cmd += operand_size;
+    operand_size = extract<uint32_t>(cmd);
+    std::pair<uint8_t, uint64_t> yOperandInfo = getMatmulOperand(cmd);
+    cmd += operand_size;
+
+    const uint8_t& xDim = xOperandInfo.first;
+    const uint8_t& yDim = yOperandInfo.first;
+    const uint64_t& xID = xOperandInfo.second;
+    const uint64_t& yID = yOperandInfo.second;
+
+    if (xDim == 1 and yDim == 1) {
+      const auto& x = std::get<ct::vector>(lookup(xID));
+      const auto& y = std::get<ct::vector>(lookup(yID));
+
+      ct::scalar tensor0D = ct::dot(x, y);
+      double result = tensor0D.get();
+
+      insert(tensorID, std::move(tensor0D));
+      tensorAstNodeType temp_node(0, ctop::broadcast, result, shape);
+      return {temp_node};
+    } else if(xDim == 1 and yDim == 2) {
+      const auto& x = std::get<ct::vector>(lookup(xID));
+      const auto& y = std::get<ct::matrix>(lookup(yID));
+
+      ct::vector tensor = ct::dot(x, y);
+      const auto& tensorNode = tensor();
+      insert(tensorID, std::move(tensor));
+
+      return tensorNode;
+    } else if(xDim == 2 and yDim == 1) {
+      const auto& x = std::get<ct::matrix>(lookup(xID));
+      const auto& y = std::get<ct::vector>(lookup(yID));
+
+      ct::vector tensor = ct::dot(x, y);
+      const auto& tensorNode = tensor();
+      insert(tensorID, std::move(tensor));
+
+      return tensorNode;
+    } else if(xDim == 2 and yDim == 2) {
+      const auto& x = std::get<ct::matrix>(lookup(xID));
+      const auto& y = std::get<ct::matrix>(lookup(yID));
+
+      ct::matrix tensor = ct::matmul(x, y);
+      const auto& tensorNode = tensor();
+      insert(tensorID, std::move(tensor));
+
+      return tensorNode;
+    }
+  }
+
   if(numOperands <= 2) {
     uint32_t operand_size = extract<uint32_t>(cmd);
     std::vector<tensorAstNodeType> left = faster_tortoise<tensorType, tensorAstNodeType>(cmd);
@@ -144,11 +212,10 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd)
       rootNode.right_ = left.size() + 1;
       right_size = right.size();
     }
-    ckout << "HEREH" << endl;
+
     ast.reserve(left.size() + right_size + 1);
     ast.emplace_back(rootNode);
     std::copy(left.begin(), left.end(), std::back_inserter(ast));
-    ckout << "THERE" << endl;
 
     if (right_size)
         std::copy(right.begin(), right.end(), std::back_inserter(ast));
