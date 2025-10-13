@@ -259,6 +259,7 @@ void Main::execute_creation(int epoch, int size, char *cmd)
 void Main::execute_fetch(int epoch, int size, char *cmd)
 {
   ct_name_t name = extract<ct_name_t>(cmd);
+  ckout << "name> " << name << endl;
   ct_array_t &arr = lookup(name);
   char *reply = nullptr;
   int reply_size = 0;

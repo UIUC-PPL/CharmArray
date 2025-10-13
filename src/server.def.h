@@ -3,6 +3,27 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /* ---------------- method closures -------------- */
 #ifndef CK_TEMPLATES_ONLY
 #endif /* CK_TEMPLATES_ONLY */
@@ -70,19 +91,103 @@
 
 
 #ifndef CK_TEMPLATES_ONLY
-  PUPable_def(pow_t)
+  PUPable_def(ct::negate_op)
 #endif /* CK_TEMPLATES_ONLY */
 
 #ifndef CK_TEMPLATES_ONLY
-  PUPable_def(log_t)
+  PUPable_def(ct::abs_op)
 #endif /* CK_TEMPLATES_ONLY */
 
 #ifndef CK_TEMPLATES_ONLY
-  PUPable_def(exp_t)
+  PUPable_def(ct::square_op)
 #endif /* CK_TEMPLATES_ONLY */
 
 #ifndef CK_TEMPLATES_ONLY
-  PUPable_def(abs_t)
+  PUPable_def(ct::sqrt_op)
+#endif /* CK_TEMPLATES_ONLY */
+
+#ifndef CK_TEMPLATES_ONLY
+  PUPable_def(ct::reciprocal_op)
+#endif /* CK_TEMPLATES_ONLY */
+
+#ifndef CK_TEMPLATES_ONLY
+  PUPable_def(ct::sin_op)
+#endif /* CK_TEMPLATES_ONLY */
+
+#ifndef CK_TEMPLATES_ONLY
+  PUPable_def(ct::cos_op)
+#endif /* CK_TEMPLATES_ONLY */
+
+#ifndef CK_TEMPLATES_ONLY
+  PUPable_def(ct::log_op)
+#endif /* CK_TEMPLATES_ONLY */
+
+#ifndef CK_TEMPLATES_ONLY
+  PUPable_def(ct::exp_op)
+#endif /* CK_TEMPLATES_ONLY */
+
+#ifndef CK_TEMPLATES_ONLY
+  PUPable_def(ct::scale_op)
+#endif /* CK_TEMPLATES_ONLY */
+
+#ifndef CK_TEMPLATES_ONLY
+  PUPable_def(ct::add_constant_op)
+#endif /* CK_TEMPLATES_ONLY */
+
+#ifndef CK_TEMPLATES_ONLY
+  PUPable_def(ct::relu_op)
+#endif /* CK_TEMPLATES_ONLY */
+
+#ifndef CK_TEMPLATES_ONLY
+  PUPable_def(ct::add_op)
+#endif /* CK_TEMPLATES_ONLY */
+
+#ifndef CK_TEMPLATES_ONLY
+  PUPable_def(ct::subtract_op)
+#endif /* CK_TEMPLATES_ONLY */
+
+#ifndef CK_TEMPLATES_ONLY
+  PUPable_def(ct::multiply_op)
+#endif /* CK_TEMPLATES_ONLY */
+
+#ifndef CK_TEMPLATES_ONLY
+  PUPable_def(ct::divide_op)
+#endif /* CK_TEMPLATES_ONLY */
+
+#ifndef CK_TEMPLATES_ONLY
+  PUPable_def(ct::power_op)
+#endif /* CK_TEMPLATES_ONLY */
+
+#ifndef CK_TEMPLATES_ONLY
+  PUPable_def(ct::modulo_op)
+#endif /* CK_TEMPLATES_ONLY */
+
+#ifndef CK_TEMPLATES_ONLY
+  PUPable_def(ct::max_op)
+#endif /* CK_TEMPLATES_ONLY */
+
+#ifndef CK_TEMPLATES_ONLY
+  PUPable_def(ct::min_op)
+#endif /* CK_TEMPLATES_ONLY */
+
+#ifndef CK_TEMPLATES_ONLY
+  PUPable_def(ct::greater_than_op)
+#endif /* CK_TEMPLATES_ONLY */
+
+#ifndef CK_TEMPLATES_ONLY
+  PUPable_def(ct::less_than_op)
+#endif /* CK_TEMPLATES_ONLY */
+
+#ifndef CK_TEMPLATES_ONLY
+  PUPable_def(ct::equal_op)
+#endif /* CK_TEMPLATES_ONLY */
+
+#ifndef CK_TEMPLATES_ONLY
+  PUPable_def(ct::atan2_op)
+#endif /* CK_TEMPLATES_ONLY */
+
+#ifndef CK_TEMPLATES_ONLY
+  PUPable_def(ct::weighted_average_op)
 #endif /* CK_TEMPLATES_ONLY */
 
 /* DEFS: mainchare Main: Chare{
@@ -278,13 +383,55 @@ void _registerserver(void)
   static int _done = 0; if(_done) return; _done = 1;
   _registerlibcharmtyles();
 
-      PUPable_reg(pow_t);
+      PUPable_reg(ct::negate_op);
 
-      PUPable_reg(log_t);
+      PUPable_reg(ct::abs_op);
 
-      PUPable_reg(exp_t);
+      PUPable_reg(ct::square_op);
 
-      PUPable_reg(abs_t);
+      PUPable_reg(ct::sqrt_op);
+
+      PUPable_reg(ct::reciprocal_op);
+
+      PUPable_reg(ct::sin_op);
+
+      PUPable_reg(ct::cos_op);
+
+      PUPable_reg(ct::log_op);
+
+      PUPable_reg(ct::exp_op);
+
+      PUPable_reg(ct::scale_op);
+
+      PUPable_reg(ct::add_constant_op);
+
+      PUPable_reg(ct::relu_op);
+
+      PUPable_reg(ct::add_op);
+
+      PUPable_reg(ct::subtract_op);
+
+      PUPable_reg(ct::multiply_op);
+
+      PUPable_reg(ct::divide_op);
+
+      PUPable_reg(ct::power_op);
+
+      PUPable_reg(ct::modulo_op);
+
+      PUPable_reg(ct::max_op);
+
+      PUPable_reg(ct::min_op);
+
+      PUPable_reg(ct::greater_than_op);
+
+      PUPable_reg(ct::less_than_op);
+
+      PUPable_reg(ct::equal_op);
+
+      PUPable_reg(ct::atan2_op);
+
+      PUPable_reg(ct::weighted_average_op);
 
 /* REG: mainchare Main: Chare{
 Main(CkArgMsg* impl_msg);

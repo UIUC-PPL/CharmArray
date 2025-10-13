@@ -24,8 +24,9 @@ inline static void remove(ct_name_t name) noexcept {
 
 static ct_array_t &lookup(ct_name_t name) {
   auto find = symbol_table.find(name);
+  CkPrintf("Looking up array %" PRIu64 " on server\n", name);
   if (find == std::end(symbol_table))
-    CmiAbort("Symbol %i not found", name);
+    CmiAbort("Symbol%" PRIu64 "not found", name);
   return find->second;
 }
 
@@ -58,7 +59,15 @@ ctop inline to_ctop(uint64_t opcode) noexcept {
     case 18: return ctop::logical_or;
     case 19: return ctop::logical_not;
     case 20: return ctop::where;
+    case 23: return ctop::unary_expr;
     default: return ctop::noop;
+  }
+}
+
+std::shared_ptr<ct::unary_operator> to_ct_unary(uint64_t opcode, const std::vector<double>& args) noexcept {
+  switch(opcode) {
+    case 23: return ct::unary_ops::abs(args);
+    default: return nullptr;
   }
 }
 
@@ -86,14 +95,13 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd)
   for(uint8_t i = 0; i < dims; i++)
     shape.push_back(extract<uint64_t>(cmd));
   ckout << "SHAPE> " << shape[0] << endl;
-  
 
-  ctop opcode = to_ctop(extract<uint32_t>(cmd));
+  uint32_t opcode = extract<uint32_t>(cmd);
   bool store  = extract<bool>(cmd);
   uint64_t tensorID = extract<uint64_t>(cmd);
   ckout << "TENSORID> " << tensorID << endl;
 
-  if (opcode == ctop::noop) {
+  if (opcode == 0) {
     ckout << "NO-OP" << endl;
     const auto& tmp = std::get<tensorType>(lookup(tensorID));
     return tmp();
@@ -105,7 +113,13 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd)
   for(uint32_t i = 0; i < numArgs; i++)
     args.push_back(extract<double>(cmd));
 
-  tensorAstNodeType rootNode(opcode, shape);
+  tensorAstNodeType rootNode;
+  ctop ctopcode = to_ctop(opcode);
+  if (ctopcode == ctop::unary_expr) {
+    rootNode = tensorAstNodeType(-1, ctopcode, to_ct_unary(opcode, args), shape);
+  } else {
+    rootNode = tensorAstNodeType(ctopcode, shape);
+  }
   std::vector<tensorAstNodeType> ast;
 
   uint8_t  numOperands = extract<uint8_t>(cmd);
@@ -121,9 +135,9 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd)
 
     rootNode.left_ = 1;
     size_t right_size;
-    if (opcode == ctop::unary_expr  ||
-        opcode == ctop::logical_not ||
-        opcode == ctop::custom_expr) {
+    if (ctopcode == ctop::unary_expr  ||
+        ctopcode == ctop::logical_not ||
+        ctopcode == ctop::custom_expr) {
       rootNode.right_ = -1;
       right_size = 0;
     } else {

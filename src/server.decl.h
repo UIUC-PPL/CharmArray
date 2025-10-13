@@ -10,6 +10,27 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /* DECLS: mainchare Main: Chare{
 Main(CkArgMsg* impl_msg);
 void handle_command(int epoch, const uint8_t &kind, const uint32_t &size, const char *cmd);
@@ -128,6 +149,27 @@ class CProxy_Main:public CProxy_Chare{
 };
 #define Main_SDAG_CODE 
 typedef CBaseT1<Chare, CProxy_Main>CBase_Main;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
