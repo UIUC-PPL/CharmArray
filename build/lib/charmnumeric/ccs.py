@@ -9,10 +9,62 @@ client_id = 0
 next_name = 0
 epoch = 0
 
-OPCODES = {'+': 1, '-': 2, '*': 3 ,'/': 4, '@': 5, 'copy': 6, 'axpy': 7,
-           'axpy_multiplier': 8, 'setitem': 9, 'pow': 10, '>': 11, 
-           '<': 12, '>=': 13, '<=': 14, '==': 15, '!=': 16, '&': 17, 
-           '|': 18, '!':19, 'where':20, 'log': 21, 'exp': 22, 'abs': 23, 'any':24, 'all':25}
+### custom opcodes
+# EXP, LOG, ABS, NEGATE, SQUARE, SQRT, RECIPROCAL, SIN, COS, RELU, SCALE, ADD_CONSTANT, ADD, SUBTRACT, 
+# MULTIPLY, DIVIDE, POWER, MODULO, MAX, MIN, GREATER_THAN, LESS_THAN, EQUAL, ATAN2, WEIGHTED_AVERAGE
+
+OPCODES = {
+    # base_op
+    '+': 1,
+    '-': 2,
+    '*': 3,
+    '/': 4,
+    '@': 5,
+    'copy': 6,
+    'axpy': 7,
+    'axpy_multiplier': 8,
+    'setitem': 9,
+    'pow': 10,
+    '>': 11,
+    '<': 12,
+    '>=': 13,
+    '<=': 14,
+    '==': 15,
+    '!=': 16,
+    '&': 17,
+    '|': 18,
+    '!': 19,
+    'where': 20,
+    
+    # custom_unary_op
+    'exp': 41,
+    'log': 42,
+    'abs': 43,
+    'negate': 44,
+    'square': 45,
+    'sqrt': 46,
+    'reciprocal': 47,
+    'sin': 48,
+    'cos': 49,
+    'relu': 50,
+    'scale': 51,
+    'add_constant': 52,
+    
+    # custom_binary_op
+    'add': 71,
+    'subtract': 72,
+    'multiply': 73,
+    'divide': 74,
+    'power': 75,
+    'modulo': 76,
+    'max': 77,
+    'min': 78,
+    'greater_than': 79,
+    'less_than': 80,
+    'equal': 81,
+    'atan2': 82,
+    'weighted_average': 83
+}
 
 INV_OPCODES = {v: k for k, v in OPCODES.items()}
 

@@ -67,6 +67,8 @@ std::pair<uint8_t, uint64_t> getMatmulOperand(char* cmd) {
 }
 
 ctop inline to_ctop(uint64_t opcode) noexcept {
+  if(opcode>=41 and opcode<=52) return ctop::unary_expr;
+  if(opcode>=71 and opcode<=83) return ctop::binary_expr;
   switch (opcode) {
     case 0:  return ctop::noop;
     case 1:  return ctop::add;
@@ -84,17 +86,48 @@ ctop inline to_ctop(uint64_t opcode) noexcept {
     case 18: return ctop::logical_or;
     case 19: return ctop::logical_not;
     case 20: return ctop::where;
-    case 23: return ctop::unary_expr;
     default: return ctop::noop;
   }
 }
 
 std::shared_ptr<ct::unary_operator> to_ct_unary(uint64_t opcode, const std::vector<double>& args) noexcept {
   switch(opcode) {
-    case 23: return ct::unary_ops::abs(args);
+    case 41: return ct::unary_ops::exp(args);
+    case 42: return ct::unary_ops::log(args);
+    case 43: return ct::unary_ops::abs(args);
+    case 44: return ct::unary_ops::negate(args);
+    case 45: return ct::unary_ops::square(args);
+    case 46: return ct::unary_ops::sqrt(args);
+    case 47: return ct::unary_ops::reciprocal(args);
+    case 48: return ct::unary_ops::sin(args);
+    case 49: return ct::unary_ops::cos(args);
+    case 50: return ct::unary_ops::relu(args);
+    case 51: return ct::unary_ops::scale(args);
+    case 52: return ct::unary_ops::add_constant(args);
     default: return nullptr;
   }
 }
+
+std::shared_ptr<ct::binary_operator> to_ct_binary(uint64_t opcode, const std::vector<double>& args) noexcept {
+  switch(opcode) {
+    case 71: return ct::binary_ops::add(args);
+    case 72: return ct::binary_ops::subtract(args);
+    case 73: return ct::binary_ops::multiply(args);
+    case 74: return ct::binary_ops::divide(args);
+    case 75: return ct::binary_ops::power(args);
+    case 76: return ct::binary_ops::modulo(args);
+    case 77: return ct::binary_ops::max(args);
+    case 78: return ct::binary_ops::min(args);
+    case 79: return ct::binary_ops::greater_than(args);
+    case 80: return ct::binary_ops::less_than(args);
+    case 81: return ct::binary_ops::equal(args);
+    case 82: return ct::binary_ops::atan2(args);
+    case 83: return ct::binary_ops::weighted_average(args);
+    default: return nullptr;
+  }
+}
+
+
 
 template<typename tensorType, typename tensorAstNodeType>
 std::vector<tensorAstNodeType> faster_tortoise(char *cmd, bool flush)
@@ -146,7 +179,9 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd, bool flush)
   ctop ctopcode = to_ctop(opcode);
   if (ctopcode == ctop::unary_expr) {
     rootNode = tensorAstNodeType(-1, ctopcode, to_ct_unary(opcode, args), shape);
-  } else {
+  } else if(ctopcode==ctop::binary_expr){
+    rootNode = tensorAstNodeType(-1, ctopcode, to_ct_binary(opcode, args), shape);
+  }else {
     rootNode = tensorAstNodeType(ctopcode, shape);
   }
   std::vector<tensorAstNodeType> ast;
