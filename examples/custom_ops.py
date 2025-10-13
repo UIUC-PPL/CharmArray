@@ -8,12 +8,12 @@ set_max_depth(10)
 
 def f():
     v = ndarray(1, 50, np.float64, init_value=-20)
-    b = ndarray(1, 50, np.float64, init_value=1)
+    b = ndarray(1, 50, np.float64, init_value=10)
     c = ndarray(1, 50, np.float64, init_value=30)
     d = ndarray(1, 50, np.float64, init_value=5)
 
     g1 = v.abs().add(b).weighted_average(c, 0.7, 0.3)
-    g2 = b.log().exp()
+    g2 = b.log(2).exp()
     g3 = v.abs().scale(2).scale(2).add_constant(29) + b + 32
     
     

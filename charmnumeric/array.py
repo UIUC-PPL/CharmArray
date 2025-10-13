@@ -305,15 +305,21 @@ class ndarray:
         return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
     
-    def log(self):
+    def log(self, base = np.e):
         res = get_name()
-        cmd_buffer = ASTNode(res, OPCODES.get('log'), [self])
+        cmd_buffer = ASTNode(res, OPCODES.get('log'), [self], args=[base])
         return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
     
-    def log(self):
+    def log10(self):
         res = get_name()
-        cmd_buffer = ASTNode(res, OPCODES.get('log'), [self])
+        cmd_buffer = ASTNode(res, OPCODES.get('log'), [self], args = [10])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def log2(self):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('log'), [self], args = [2])
         return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
     
