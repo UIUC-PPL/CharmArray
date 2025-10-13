@@ -8,6 +8,9 @@
         "format": "cpp",
         "unordered_map": "cpp",
         "map": "cpp",
-        "set": "cpp"
+        "set": "cpp",
+        "chrono": "cpp",
+        "memory": "cpp",
+        "utility": "cpp"
     }
 }

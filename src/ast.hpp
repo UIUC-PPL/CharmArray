@@ -50,7 +50,7 @@ std::pair<uint8_t, uint64_t> getMatmulOperand(char* cmd) {
   if (opcode) CmiAbort("Matmuls not supported with rvalues");
   cmd += sizeof(bool);
   uint64_t tensorID = extract<uint64_t>(cmd);
-  return std::make_pair<uint8_t, uint64_t>(dim, tensorID);
+  return {dim, tensorID};
 }
 
 ctop inline to_ctop(uint64_t opcode) noexcept {
@@ -163,33 +163,37 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd)
       insert(tensorID, std::move(tensor0D));
       tensorAstNodeType temp_node(0, ctop::broadcast, result, shape);
       return {temp_node};
-    } else if(xDim == 1 and yDim == 2) {
-      const auto& x = std::get<ct::vector>(lookup(xID));
-      const auto& y = std::get<ct::matrix>(lookup(yID));
+    } else if constexpr (std::is_same_v<tensorType, ct::vector>) {
+      if (xDim == 1 and yDim == 2) {
+        const auto& x = std::get<ct::vector>(lookup(xID));
+        const auto& y = std::get<ct::matrix>(lookup(yID));
 
-      ct::vector tensor = ct::dot(x, y);
-      const auto& tensorNode = tensor();
-      insert(tensorID, std::move(tensor));
+        ct::vector tensor = ct::dot(x, y);
+        const auto& tensorNode = tensor();
+        insert(tensorID, std::move(tensor));
 
-      return tensorNode;
-    } else if(xDim == 2 and yDim == 1) {
-      const auto& x = std::get<ct::matrix>(lookup(xID));
-      const auto& y = std::get<ct::vector>(lookup(yID));
+        return tensorNode;
+      } else if (xDim == 2 and yDim == 1) {
+        const auto& x = std::get<ct::matrix>(lookup(xID));
+        const auto& y = std::get<ct::vector>(lookup(yID));
 
-      ct::vector tensor = ct::dot(x, y);
-      const auto& tensorNode = tensor();
-      insert(tensorID, std::move(tensor));
+        ct::vector tensor = ct::dot(x, y);
+        const auto& tensorNode = tensor();
+        insert(tensorID, std::move(tensor));
 
-      return tensorNode;
-    } else if(xDim == 2 and yDim == 2) {
-      const auto& x = std::get<ct::matrix>(lookup(xID));
-      const auto& y = std::get<ct::matrix>(lookup(yID));
+        return tensorNode;
+      }
+    } else if constexpr (std::is_same_v<tensorType, ct::matrix>) {
+      if (xDim == 2 and yDim == 2) {
+        const auto& x = std::get<ct::matrix>(lookup(xID));
+        const auto& y = std::get<ct::matrix>(lookup(yID));
 
-      ct::matrix tensor = ct::matmul(x, y);
-      const auto& tensorNode = tensor();
-      insert(tensorID, std::move(tensor));
+        ct::matrix tensor = ct::matmul(x, y);
+        const auto& tensorNode = tensor();
+        insert(tensorID, std::move(tensor));
 
-      return tensorNode;
+        return tensorNode;
+      }
     }
   }
 
