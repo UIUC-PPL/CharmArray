@@ -42,15 +42,26 @@ inline T peek(char* &msg) noexcept {
   return *(reinterpret_cast<T*>(msg));
 }
 
+template<typename tensorType, typename tensorAstNodeType>
+std::vector<tensorAstNodeType> faster_tortoise(char *cmd, bool flush = false);
+
+template<typename tensorType, typename tensorAstNodeType>
 std::pair<uint8_t, uint64_t> getMatmulOperand(char* cmd) {
+  char* recurse_cmd = cmd;
+
   uint8_t marker = extract<uint8_t>(cmd);
   if (marker != 2) CmiAbort("Matmuls only supported with Tensor Types");
+
   uint8_t dim = extract<uint8_t>(cmd);
   if (dim < 1 || dim > 2) CmiAbort("Matmuls not supported with dimension%" PRIu8 "", dim);
+
   cmd += dim * sizeof(uint64_t);
+
   uint32_t opcode = extract<uint32_t>(cmd);
-  if (opcode) CmiAbort("Matmuls not supported with rvalues");
+  if (opcode) faster_tortoise<tensorType, tensorAstNodeType>(recurse_cmd, true);
+
   cmd += sizeof(bool);
+
   uint64_t tensorID = extract<uint64_t>(cmd);
   return {dim, tensorID};
 }
@@ -86,7 +97,7 @@ std::shared_ptr<ct::unary_operator> to_ct_unary(uint64_t opcode, const std::vect
 }
 
 template<typename tensorType, typename tensorAstNodeType>
-std::vector<tensorAstNodeType> faster_tortoise(char *cmd)
+std::vector<tensorAstNodeType> faster_tortoise(char *cmd, bool flush)
 {
   uint8_t marker = extract<uint8_t>(cmd);
   ckout << "Marker> " << marker << endl;
@@ -156,10 +167,10 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd)
   if (ctopcode == ctop::matmul) {
     ckout << "IN MATMUL" << endl;
     uint32_t operand_size = extract<uint32_t>(cmd);
-    std::pair<uint8_t, uint64_t> xOperandInfo = getMatmulOperand(cmd);
+    std::pair<uint8_t, uint64_t> xOperandInfo = getMatmulOperand<tensorType, tensorAstNodeType>(cmd);
     cmd += operand_size;
     operand_size = extract<uint32_t>(cmd);
-    std::pair<uint8_t, uint64_t> yOperandInfo = getMatmulOperand(cmd);
+    std::pair<uint8_t, uint64_t> yOperandInfo = getMatmulOperand<tensorType, tensorAstNodeType>(cmd);
     cmd += operand_size;
 
     const uint8_t& xDim = xOperandInfo.first;
@@ -324,7 +335,7 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd)
     }
   }
 
-  if (store) {
+  if (store or flush) {
     tensorType tensor(ast);
     const auto& tensorNode = tensor();
     insert(tensorID, std::move(tensor));

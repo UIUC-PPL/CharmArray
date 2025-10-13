@@ -13,29 +13,29 @@ def f():
     c = ndarray(1, 10, np.float64, init_value=-30)
     # k = v * 2 + b + 3 + c - 32
     # l = k >= 42
-    q = v @ b
-    q.get()
-    v1 = q @ c
-    v2 = b @ c
+    v1 = (b + c) @ (b - c)
+    # q.get()
+    # v1 = q @ c
+    # v2 = b @ c
     # q1 = q @ v
-    v3 = b @ c
+    # v3 = b @ c
 
-    v1.get()
-    v2.get()
-    v3.get()
+    # v1.get()
+    # v2.get()
+    # v3.get()
 
-    res =  v3*8 + v1 - 4 + v2.abs()
+    # res =  v3 * 8 + v1 - 4 + v2.abs()
 
-    res.get()
+    # res.get()
 
-    final_res = res + 42
+    # final_res = res + 42
 
     # q.get()
     # w = c @ b
     # w.get()
     # res = q.abs() + c
-    baka = final_res.get()
-    print(baka)
+    # baka = final_res.get()
+    print(v1.get())
     # r = b.where(42, 69)
     # g = b.where(v, c)
     # z = ~r
