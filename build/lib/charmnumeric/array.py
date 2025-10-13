@@ -292,39 +292,10 @@ class ndarray:
         cmd_buffer = ASTNode(res, OPCODES.get('copy'), [self])
         return create_ndarray(self.ndim, self.dtype,shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
-    def sqrt(self):
-        res = get_name()
-        cmd_buffer = ASTNode(res, OPCODES.get('pow'), [self], args=[0.5])
-        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
-                              name=res, command_buffer=cmd_buffer)
     
-    def cbrt(self):
+    def where(self, other, third):
         res = get_name()
-        cmd_buffer = ASTNode(res, OPCODES.get('pow'), [self], args=[1/3])
-        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
-                              name=res, command_buffer=cmd_buffer)
-    
-    def pow(self, exponent):
-        res = get_name()
-        cmd_buffer = ASTNode(res, OPCODES.get('pow'), [self], args=[exponent])
-        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
-                              name=res, command_buffer=cmd_buffer)
-    
-    def log(self, base=np.e):
-        res = get_name()
-        cmd_buffer = ASTNode(res, OPCODES.get('log'), [self], args=[base])
-        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
-                              name=res, command_buffer=cmd_buffer)
-
-    def log10(self):
-        res = get_name()
-        cmd_buffer = ASTNode(res, OPCODES.get('log'), [self], args=[10])
-        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
-                              name=res, command_buffer=cmd_buffer)
-
-    def log2(self):
-        res = get_name()
-        cmd_buffer = ASTNode(res, OPCODES.get('log'), [self], args=[2])
+        cmd_buffer = ASTNode(res, OPCODES.get('where'), [other, third, self])
         return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
     
@@ -334,18 +305,157 @@ class ndarray:
         return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
     
+    def log(self):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('log'), [self])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def log(self):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('log'), [self])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
     def abs(self):
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('abs'), [self])
         return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
-    
-    def where(self, other, third):
+
+    def negate(self):
         res = get_name()
-        cmd_buffer = ASTNode(res, OPCODES.get('where'), [other, third, self])
+        cmd_buffer = ASTNode(res, OPCODES.get('negate'), [self])
         return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
                               name=res, command_buffer=cmd_buffer)
     
+    def square(self):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('sqare'), [self])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def sqrt(self):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('sqrt'), [self])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def reciprocal(self):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('reciprocal'), [self])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+
+    def sin(self):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('sin'), [self])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+
+    def cos(self):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('cos'), [self])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+
+    def relu(self):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('relu'), [self])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def scale(self, scalar):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('scale'), [self], args=[scalar])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def add_constant(self, constant):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('add_constant'), [self], args=[constant])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+
+    def add(self, other):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('add'), [self, other])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def subtract(self, other):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('subtract'), [self, other])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+
+    def multiply(self, other):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('multiply'), [self, other])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def divide(self, other):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('divide'), [self, other])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+
+    def modulo(self, other):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('modulo'), [self, other])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+
+    def power(self, other):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('power'), [self, other])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+
+    def max(self, other):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('max'), [self, other])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+
+    def min(self, other):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('min'), [self, other])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+
+    def greater_than(self, other):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('greater_than'), [self, other])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def less_than(self, other):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('less_than'), [self, other])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def equal(self, other, epsilon=1e-5):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('equal'), [self, other], args=[epsilon])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+    
+    def atan2(self, other):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('atan2'), [self, other])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+
+    def weighted_average(self, other, w1, w2):
+        res = get_name()
+        cmd_buffer = ASTNode(res, OPCODES.get('weighted_average'), [self, other],
+                             args=[w1, w2])
+        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
+                              name=res, command_buffer=cmd_buffer)
+
     def any(self):
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('any'), [self])
