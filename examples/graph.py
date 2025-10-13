@@ -8,12 +8,13 @@ import numpy as np
 set_max_depth(10)
 
 def f():
-    v = ndarray(2, [10, 10], np.float64, init_value=-20)
-    b = ndarray(1, 10, np.float64, init_value=10)
-    c = ndarray(1, 10, np.float64, init_value=-30)
+    v = ndarray(2, [10, 10], np.float64, init_value=20)
+    b = ndarray(2, [10, 10], np.float64, init_value=10)
+    # c = ndarray(1, 10, np.float64, init_value=-30)
     # k = v * 2 + b + 3 + c - 32
     # l = k >= 42
-    v1 = (b + c) @ (b - c)
+    v1 = v @ b
+    # v1 = (b + c) @ (b - c)
     # q.get()
     # v1 = q @ c
     # v2 = b @ c

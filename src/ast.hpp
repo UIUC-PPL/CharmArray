@@ -100,7 +100,6 @@ template<typename tensorType, typename tensorAstNodeType>
 std::vector<tensorAstNodeType> faster_tortoise(char *cmd, bool flush)
 {
   uint8_t marker = extract<uint8_t>(cmd);
-  ckout << "Marker> " << marker << endl;
 
   std::vector<uint64_t> shape; shape.reserve(2);
 
@@ -112,26 +111,21 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd, bool flush)
       shape.push_back(extract<uint64_t>(cmd));
     }
     double value = extract<double>(cmd);
-    ckout << "VAL> " << value << endl;
     tensorAstNodeType temp_node(0, ctop::broadcast, value, shape);
     return {temp_node};
   }
 
   uint8_t dims = extract<uint8_t>(cmd);
-  ckout << "DIMS> " << dims << endl;
 
   for(uint8_t i = 0; i < dims; i++)
     shape.push_back(extract<uint64_t>(cmd));
-  ckout << "SHAPE> " << shape[0] << endl;
 
   uint32_t opcode = extract<uint32_t>(cmd);
   bool store  = extract<bool>(cmd);
   uint64_t tensorID = extract<uint64_t>(cmd);
-  ckout << "TENSORID> " << tensorID << endl;
 
   if (opcode == 0) {
     if (marker == 1) {
-      ckout << "GOT ME A SCALAR TYPE YES" << endl;
       auto& tmp = std::get<ct::scalar>(lookup(tensorID));
       double result = tmp.get();
       tensorAstNodeType temp_node(0, ctop::broadcast, result, shape);
@@ -158,14 +152,12 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd, bool flush)
   std::vector<tensorAstNodeType> ast;
 
   uint8_t  numOperands = extract<uint8_t>(cmd);
-  ckout << "NUM OPERANDS> " << numOperands << endl;
 
   // when we encounter a matmul, we treat it as a :
   // 1. a dot product returning a scalar if both the operands are vectors
   // 2. a dot product returning a vector if one operand is a matrix and the other a vector
   // 3. a gemm returning a matrix if both the operands are matrices
   if (ctopcode == ctop::matmul) {
-    ckout << "IN MATMUL" << endl;
     uint32_t operand_size = extract<uint32_t>(cmd);
     std::pair<uint8_t, uint64_t> xOperandInfo = getMatmulOperand<tensorType, tensorAstNodeType>(cmd);
     cmd += operand_size;
