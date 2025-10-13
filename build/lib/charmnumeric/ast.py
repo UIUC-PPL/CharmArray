@@ -34,24 +34,28 @@ class ASTNode(object):
                 if isinstance(op, ndarray):
                     self.depth = max(self.depth, 1 + op.command_buffer.depth)
 
-    ######################################################################################################################################
-    # Encoding = | dim | shape | opcode | save_op | ID | NumArgs | Args | NumOperands | OperandEncodingSize | RecursiveOperandEncoding | #
-    #            |  8  |  64   |   32   |   1     | 64 |   32    |  64  |     8       |         32          | ........................ | #
-    # NB: If opcode is 0, the encoding is limited to ID                                                                                  #
-    # Encoding = | dim | shape |  val  |                                                                                                 #
-    #            |  8  |  64   |   64  |                                                                                                 #
-    # NB: Latter encoding for double constants                                                                                           #
-    ######################################################################################################################################
-    def get_command(self, validated_arrays, ndim, shape, save=True):
+    ###############################################################################################################################################
+    # Marker determines whether we are dealing with a tensor, a scalar or an arithmetic type                                                      #
+    # Encoding = | Marker | dim | shape | opcode | save_op | ID | NumArgs | Args | NumOperands | OperandEncodingSize | RecursiveOperandEncoding | #
+    #            |   8    |  8  |  64   |   32   |   1     | 64 |   32    |  64  |     8       |         32          | ........................ | #
+    # NB: If opcode is 0, the encoding is limited to ID                                                                                           #
+    # Encoding = | Marker | shape |  val  |                                                                                                       #
+    #            |   8    |  64   |  64   |                                                                                                       #
+    # NB: Latter encoding for double constants                                                                                                    #
+    ###############################################################################################################################################
+    def get_command(self, validated_arrays, ndim, shape, save=True, is_scalar=False):
         from charmnumeric.array import ndarray
 
         # Ndims and Shape setup
-        cmd = to_bytes(ndim, 'B')
+        if is_scalar:
+            cmd = to_bytes(1, 'B')
+        else:
+            cmd = to_bytes(2, 'B')
+        cmd += to_bytes(ndim, 'B')
         for _shape in shape:
             cmd += to_bytes(_shape, 'L')
 
         if self.opcode == 0:
-            print(self.operands[0].name)
             cmd += to_bytes(0, 'I') + to_bytes(False, '?') + to_bytes(self.operands[0].name, 'L')
             return cmd
 
@@ -61,28 +65,32 @@ class ASTNode(object):
             cmd += to_bytes(arg, 'd')
 
         cmd += to_bytes(len(self.operands), 'B')
-        print(len(self.operands))
         for op in self.operands:
             if isinstance(op, ndarray):
                 if op.name in validated_arrays:
-                    opcmd = to_bytes(op.ndim, 'B')
+                    if op.is_scalar:
+                        opcmd = to_bytes(1, 'B')
+                    else:
+                        opcmd = to_bytes(2, 'B')
+                    opcmd += to_bytes(op.ndim, 'B')
                     for _shape in op.shape:
                         opcmd += to_bytes(_shape, 'L')
                     opcmd += to_bytes(0, 'I') + to_bytes(False, '?') + to_bytes(op.name, 'L')
                 else:
                     save_op = True if c_long.from_address(id(op)).value - 2 > 0 else False
-                    opcmd = op.command_buffer.get_command(validated_arrays, op.ndim, op.shape, save=save_op)
+                    if op.is_scalar:
+                        opcmd = op.command_buffer.get_command(validated_arrays, ndim, shape, save=save_op, is_scalar=op.is_scalar)
+                    else:
+                        opcmd = op.command_buffer.get_command(validated_arrays, op.ndim, op.shape, save=save_op, is_scalar=op.is_scalar)
                     if not op.valid and save_op:
                         validated_arrays[op.name] = op
             elif isinstance(op, float) or isinstance(op, int):
-                print("SCALAR OP> ", op)
                 opcmd = to_bytes(0, 'B')
                 for _shape in shape:
                     opcmd += to_bytes(_shape, 'L')
                 opcmd += to_bytes(float(op), 'd')
             cmd += to_bytes(len(opcmd), 'I')
             cmd += opcmd
-        print(cmd)
         return cmd
 
     def plot_graph(self, validated_arrays={}, G=None, node_map={},

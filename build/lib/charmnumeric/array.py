@@ -13,9 +13,9 @@ deletion_buffer = b''
 deletion_buffer_size = 0
 
 
-def create_ndarray(ndim, dtype, shape=None, name=None, command_buffer=None):
+def create_ndarray(ndim, dtype, shape=None, name=None, command_buffer=None, is_scalar=False):
     z = ndarray(ndim, dtype=dtype, shape=shape, name=name,
-                   command_buffer=command_buffer)
+                   command_buffer=command_buffer, is_scalar=is_scalar)
     return z
 
 
@@ -26,7 +26,7 @@ def from_numpy(nparr):
 
 class ndarray:
     def __init__(self, ndim, shape=None, dtype=np.float64, init_value=None,
-                 nparr=None, name=None, command_buffer=None):
+                 nparr=None, name=None, command_buffer=None, is_scalar=False):
         """
         This is the wrapper class for AUM array objects.
         The argument 'name' should be None except when wrapping
@@ -41,6 +41,7 @@ class ndarray:
         self.itemsize = np.dtype(dtype).itemsize
         self.init_value = init_value
         self.command_buffer = command_buffer
+        self.is_scalar = is_scalar
         if isinstance(shape, np.ndarray) or isinstance(shape, list) or \
                 isinstance(shape, tuple):
             self.shape = np.asarray(shape, dtype=np.int32)
@@ -218,6 +219,7 @@ class ndarray:
                               name=res, command_buffer=cmd_buffer)
 
     def __matmul__(self, other):
+        is_scalar = False
         if self.ndim == 2 and other.ndim == 2:
             res_ndim = 2
             shape = np.array([self.shape[0], other.shape[1]], dtype=np.int32)
@@ -225,14 +227,15 @@ class ndarray:
             res_ndim = 1
             shape = np.array([self.shape[0]], dtype=np.int32)
         elif self.ndim == 1 and other.ndim == 1:
-            res_ndim = 0
+            res_ndim = 1
             shape = np.array([1], dtype=np.int32)
+            is_scalar = True
         else:
             raise RuntimeError("Dimension mismatch")
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('@'), [self, other])
         return create_ndarray(res_ndim, self.dtype, shape=shape,
-                              name=res, command_buffer=cmd_buffer)
+                              name=res, command_buffer=cmd_buffer, is_scalar=is_scalar)
 
     def _flush_command_buffer(self):
         # send the command to server
@@ -270,6 +273,7 @@ class ndarray:
             data_bytes = send_command_raw(Handlers.fetch_handler, cmd, reply_size=total_size)
             return from_bytes(data_bytes, np.dtype(self.dtype).char)
         else:
+            print("GET OSME")
             total_size = self.itemsize
             for i in self.shape:
                 total_size*=i

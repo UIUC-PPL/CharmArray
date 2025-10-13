@@ -11,6 +11,10 @@
         "set": "cpp",
         "chrono": "cpp",
         "memory": "cpp",
-        "utility": "cpp"
+        "utility": "cpp",
+        "array": "cpp",
+        "ranges": "cpp",
+        "tuple": "cpp",
+        "variant": "cpp"
     }
 }

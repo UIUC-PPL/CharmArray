@@ -10,7 +10,7 @@
 
 using ctop = ct::util::Operation;
 using ct_name_t = uint64_t;
-using ct_array_t = std::variant<ct::scalar, ct::vector, ct::matrix, double>;
+using ct_array_t = std::variant<ct::scalar, ct::vector, ct::matrix>;
 std::unordered_map<ct_name_t, ct_array_t> symbol_table;
 
 inline static void insert(ct_name_t name, ct_array_t arr) noexcept {
@@ -43,6 +43,8 @@ inline T peek(char* &msg) noexcept {
 }
 
 std::pair<uint8_t, uint64_t> getMatmulOperand(char* cmd) {
+  uint8_t marker = extract<uint8_t>(cmd);
+  if (marker != 2) CmiAbort("Matmuls only supported with Tensor Types");
   uint8_t dim = extract<uint8_t>(cmd);
   if (dim < 1 || dim > 2) CmiAbort("Matmuls not supported with dimension%" PRIu8 "", dim);
   cmd += dim * sizeof(uint64_t);
@@ -86,12 +88,12 @@ std::shared_ptr<ct::unary_operator> to_ct_unary(uint64_t opcode, const std::vect
 template<typename tensorType, typename tensorAstNodeType>
 std::vector<tensorAstNodeType> faster_tortoise(char *cmd)
 {
-  uint8_t dims = extract<uint8_t>(cmd);
-  ckout << "DIMS> " << dims << endl;
+  uint8_t marker = extract<uint8_t>(cmd);
+  ckout << "Marker> " << marker << endl;
 
   std::vector<uint64_t> shape; shape.reserve(2);
 
-  if (dims == 0) {
+  if (marker == 0) {
     if constexpr (std::is_same_v<tensorType, ct::vector>) {
       shape.push_back(extract<uint64_t>(cmd));
     } else if constexpr (std::is_same_v<tensorType, ct::matrix>) {
@@ -104,6 +106,9 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd)
     return {temp_node};
   }
 
+  uint8_t dims = extract<uint8_t>(cmd);
+  ckout << "DIMS> " << dims << endl;
+
   for(uint8_t i = 0; i < dims; i++)
     shape.push_back(extract<uint64_t>(cmd));
   ckout << "SHAPE> " << shape[0] << endl;
@@ -114,8 +119,16 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd)
   ckout << "TENSORID> " << tensorID << endl;
 
   if (opcode == 0) {
-    const auto& tmp = std::get<tensorType>(lookup(tensorID));
-    return tmp();
+    if (marker == 1) {
+      ckout << "GOT ME A SCALAR TYPE YES" << endl;
+      auto& tmp = std::get<ct::scalar>(lookup(tensorID));
+      double result = tmp.get();
+      tensorAstNodeType temp_node(0, ctop::broadcast, result, shape);
+      return {temp_node};
+    } else {
+      const auto& tmp = std::get<tensorType>(lookup(tensorID));
+      return tmp();
+    }
   }
 
   // Args for custom unops/binops
@@ -141,6 +154,7 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd)
   // 2. a dot product returning a vector if one operand is a matrix and the other a vector
   // 3. a gemm returning a matrix if both the operands are matrices
   if (ctopcode == ctop::matmul) {
+    ckout << "IN MATMUL" << endl;
     uint32_t operand_size = extract<uint32_t>(cmd);
     std::pair<uint8_t, uint64_t> xOperandInfo = getMatmulOperand(cmd);
     cmd += operand_size;
