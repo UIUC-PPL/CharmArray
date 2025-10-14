@@ -21,20 +21,18 @@ OPCODES = {
     '/': 4,
     '@': 5,
     'copy': 6,
-    'axpy': 7,
-    'axpy_multiplier': 8,
-    'setitem': 9,
-    'pow': 10,
-    '>': 11,
-    '<': 12,
-    '>=': 13,
-    '<=': 14,
-    '==': 15,
-    '!=': 16,
-    '&': 17,
-    '|': 18,
-    '!': 19,
-    'where': 20,
+    'setitem': 7,
+    'pow': 8,
+    '>': 9,
+    '<': 10,
+    '>=': 11,
+    '<=': 12,
+    '==': 13,
+    '!=': 14,
+    '&': 15,
+    '|': 16,
+    '!': 17,
+    'where': 18,
     
     # custom_unary_op
     'exp': 41,
@@ -63,7 +61,8 @@ OPCODES = {
     'less_than': 80,
     'equal': 81,
     'atan2': 82,
-    'weighted_average': 83
+    'weighted_average': 83,
+    'axpy': 84
 }
 
 INV_OPCODES = {v: k for k, v in OPCODES.items()}

@@ -29,6 +29,7 @@ mainmodule server
     PUPable ct::equal_op;
     PUPable ct::atan2_op;
     PUPable ct::weighted_average_op;
+    PUPable ct::axpy_op;
 
     mainchare Main
     {

@@ -68,7 +68,7 @@ std::pair<uint8_t, uint64_t> getFlushedOperand(char* cmd) {
 
 ctop inline to_ctop(uint64_t opcode) noexcept {
   if(opcode>=41 and opcode<=52) return ctop::unary_expr;
-  if(opcode>=71 and opcode<=83) return ctop::binary_expr;
+  if(opcode>=71 and opcode<=84) return ctop::binary_expr;
   switch (opcode) {
     case 0:  return ctop::noop;
     case 1:  return ctop::add;
@@ -77,16 +77,16 @@ ctop inline to_ctop(uint64_t opcode) noexcept {
     case 4:  return ctop::divide;
     case 5:  return ctop::matmul;
     case 6:  return ctop::copy;
-    case 11: return ctop::greater;
-    case 12: return ctop::lesser;
-    case 13: return ctop::geq;
-    case 14: return ctop::leq;
-    case 15: return ctop::eq;
-    case 16: return ctop::neq;
-    case 17: return ctop::logical_and;
-    case 18: return ctop::logical_or;
-    case 19: return ctop::logical_not;
-    case 20: return ctop::where;
+    case 9: return ctop::greater;
+    case 10: return ctop::lesser;
+    case 11: return ctop::geq;
+    case 12: return ctop::leq;
+    case 13: return ctop::eq;
+    case 14: return ctop::neq;
+    case 15: return ctop::logical_and;
+    case 16: return ctop::logical_or;
+    case 17: return ctop::logical_not;
+    case 18: return ctop::where;
     default: return ctop::noop;
   }
 }
@@ -124,6 +124,7 @@ std::shared_ptr<ct::binary_operator> to_ct_binary(uint64_t opcode, const std::ve
     case 81: return ct::binary_ops::equal(args);
     case 82: return ct::binary_ops::atan2(args);
     case 83: return ct::binary_ops::weighted_average(args);
+    case 84: return ct::binary_ops::axpy(args);
     default: return nullptr;
   }
 }
@@ -155,6 +156,7 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd, bool flush)
   uint32_t opcode = extract<uint32_t>(cmd);
   bool store  = extract<bool>(cmd);
   uint64_t tensorID = extract<uint64_t>(cmd);
+  ckout<<"for tensorid "<<tensorID<<" -> "<<store<<endl;
 
   if (opcode == 0) {
     if (marker == 1) {
@@ -264,20 +266,32 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd, bool flush)
     uint32_t operand_size = extract<uint32_t>(cmd);
     std::vector<tensorAstNodeType> left = faster_tortoise<tensorType, tensorAstNodeType>(cmd);
     cmd += operand_size;
-    operand_size = extract<uint32_t>(cmd);
-    std::vector<tensorAstNodeType> right = faster_tortoise<tensorType, tensorAstNodeType>(cmd);
-    cmd += operand_size;
+    std::vector<tensorAstNodeType> right;
+    if(numOperands==2){
+      operand_size = extract<uint32_t>(cmd);
+      right = faster_tortoise<tensorType, tensorAstNodeType>(cmd);
+      cmd += operand_size;
+    }
 
     rootNode.left_ = 1;
     size_t right_size;
+    size_t left_size;
     if (ctopcode == ctop::unary_expr  ||
         ctopcode == ctop::logical_not ||
         ctopcode == ctop::custom_expr) {
       rootNode.right_ = -1;
       right_size = 0;
+      left_size = left.size();
+    } else if(ctopcode == ctop::copy){
+      //assuming copy is done on non temps only
+      rootNode.right_ = -1;
+      left_size = 0;
+      right_size = 0;
+      rootNode.copy_id_ = left[0].name_;
     } else {
       rootNode.right_ = left.size() + 1;
       right_size = right.size();
+      left_size = left.size();
     }
 
     ast.reserve(left.size() + right_size + 1);
@@ -317,6 +331,7 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd, bool flush)
             ast[i].ter_ += 1 + left.size();
         }
     }
+    ckout<<"HERE "<<endl;
   } else {
     uint32_t operand_size = extract<uint32_t>(cmd);
     std::vector<tensorAstNodeType> left = faster_tortoise<tensorType, tensorAstNodeType>(cmd);
@@ -372,8 +387,9 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd, bool flush)
         ast[i].ter_ += 1 + left.size() + right.size();
     }
   }
-
+  
   if (store or flush) {
+    ckout<<"store through AST break "<<tensorID<<endl;
     tensorType tensor(ast);
     const auto& tensorNode = tensor();
     insert(tensorID, std::move(tensor));
