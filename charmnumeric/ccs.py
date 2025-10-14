@@ -146,7 +146,6 @@ def get_creation_command(arr, name, shape, buf=None):
         cmd += buf
     elif arr.init_value is not None:
         cmd += to_bytes(arr.init_value, 'd')
-    print(cmd)
     cmd = to_bytes(get_epoch(), 'i') + to_bytes(len(cmd), 'I') + cmd
     return cmd
 

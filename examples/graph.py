@@ -8,9 +8,9 @@ import numpy as np
 set_max_depth(10)
 
 def f():
-    v = ndarray(2, [10, 10], np.float64, init_value=20)
-    b = ndarray(2, [10, 10], np.float64, init_value=10)
-    c = ndarray(1, 10, np.float64, init_value=-30)
+    v = ndarray(1, 10, np.float64, init_value=2)
+    b = ndarray(1, 10, np.float64, init_value=1)
+    c = ndarray(1, 10, np.float64, init_value=3)
     # k = v * 2 + b + 3 + c - 32
     # l = k >= 42
     # v1 = v @ b
@@ -32,12 +32,21 @@ def f():
     # final_res = res + 42
 
     # q.get()
+    a1 = b @ c
+    print(a1.get())
+    a2 = v @ c
+    print(a2.get())
+    res = (a1 / a2) * b + c
+    v = 2
+    # a3 = a1 + a2
+    print(v.get())
+    # res = a3 * v
     # w = c @ b
     # w.get()
     # res = q.abs() + c
     # baka = final_res.get()
-    v1 = b.copy()
-    print(v1.get())
+    # v1 = b.copy()
+    # print(res.get())
     # r = b.where(42, 69)
     # g = b.where(v, c)
     # z = ~r

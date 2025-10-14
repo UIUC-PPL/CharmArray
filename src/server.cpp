@@ -142,9 +142,10 @@ void Main::execute_operation(int epoch, int size, char *cmd)
     remove(name);
   }
   CkPrintf("Memory usage after %u deletions is %f MB\n", num_deletions, CmiMemoryUsage() / (1024. * 1024.));
-  char* tagPos  = cmd + sizeof(uint8_t);
-  if (peek<uint8_t>(tagPos) == 1) faster_tortoise<ct::vector, ct::vec_impl::vec_node>(cmd);
-  else if (peek<uint8_t>(tagPos) == 2) faster_tortoise<ct::matrix, ct::mat_impl::mat_node>(cmd);
+  char* dimPos  = cmd + sizeof(uint8_t);
+  if (peek<uint8_t>(cmd) == 1) slower_hare(cmd);
+  else if (peek<uint8_t>(dimPos) == 1) faster_tortoise<ct::vector, ct::vec_impl::vec_node>(cmd);
+  else if (peek<uint8_t>(dimPos) == 2) faster_tortoise<ct::matrix, ct::mat_impl::mat_node>(cmd);
 }
 
 void Main::execute_command(int epoch, uint8_t kind, int size, char *cmd)
@@ -266,13 +267,11 @@ void Main::execute_fetch(int epoch, int size, char *cmd)
       [&](auto &x)
       {
         using T = std::decay_t<decltype(x)>;
-        if constexpr (std::is_same_v<T, ct::scalar>)
+        if constexpr (std::is_same_v<T, double>)
         {
-          double value = x.get();
-          reply = (char *)&value;
+          reply = (char *)&x;
           reply_size += 8;
           send_reply(epoch, reply_size, reply);
-          // CcsSendReply(reply_size, reply);
         }
         else if constexpr (std::is_same_v<T, ct::vector>)
         {

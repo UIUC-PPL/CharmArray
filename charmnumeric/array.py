@@ -23,6 +23,18 @@ def from_numpy(nparr):
     return ndarray(nparr.ndim, dtype=nparr.dtype, shape=nparr.shape,
                    nparr=nparr)
 
+def isScalarResult(a, b):
+    return a.is_scalar and b.is_scalar
+
+def getDimShape(a, b):
+    if isinstance(b, float) or isinstance(b, int):
+        return [a.ndim, a.shape.copy()]
+    elif isinstance(a, float) or isinstance(a, int):
+        return [b.ndim, b.shape.copy()]
+    elif a.is_scalar:
+        return [b.ndim, b.shape.copy()]
+    else:
+        return [a.ndim, a.shape.copy()]
 
 class ndarray:
     def __init__(self, ndim, shape=None, dtype=np.float64, init_value=None,
@@ -104,8 +116,9 @@ class ndarray:
     def __add__(self, other):
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('+'), [self, other])
-        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
-                              name=res, command_buffer=cmd_buffer)
+        ndim, shape = getDimShape(self, other)
+        return create_ndarray(ndim, self.dtype, shape=shape,
+                              name=res, command_buffer=cmd_buffer, is_scalar=isScalarResult(self, other))
 
     def __radd__(self, other):
         return self + other
@@ -113,8 +126,10 @@ class ndarray:
     def __sub__(self, other):
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('-'), [self, other])
-        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
-                              name=res, command_buffer=cmd_buffer)
+        ndim, shape = getDimShape(self, other)
+        return create_ndarray(ndim, self.dtype, shape=shape,
+                              name=res, command_buffer=cmd_buffer, is_scalar=isScalarResult(self, other))
+
 
     def __rsub__(self, other):
         return -1 * (self - other)
@@ -122,8 +137,10 @@ class ndarray:
     def __lt__(self, other):
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('<'), [self, other])
-        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
-                              name=res, command_buffer=cmd_buffer)
+        ndim, shape = getDimShape(self, other)
+        return create_ndarray(ndim, self.dtype, shape=shape,
+                              name=res, command_buffer=cmd_buffer, is_scalar=isScalarResult(self, other))
+
     
     def __rlt__(self, other):
         return self >= other
@@ -131,8 +148,10 @@ class ndarray:
     def __gt__(self, other):
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('>'), [self, other])
-        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
-                              name=res, command_buffer=cmd_buffer)
+        ndim, shape = getDimShape(self, other)
+        return create_ndarray(ndim, self.dtype, shape=shape,
+                              name=res, command_buffer=cmd_buffer, is_scalar=isScalarResult(self, other))
+
     
     def __rgt__(self, other):
         return self <= other
@@ -140,8 +159,10 @@ class ndarray:
     def __le__(self, other):
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('<='), [self, other])
-        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
-                              name=res, command_buffer=cmd_buffer)
+        ndim, shape = getDimShape(self, other)
+        return create_ndarray(ndim, self.dtype, shape=shape,
+                              name=res, command_buffer=cmd_buffer, is_scalar=isScalarResult(self, other))
+
     
     def __rle__(self, other):
         return self > other
@@ -149,8 +170,10 @@ class ndarray:
     def __ge__(self, other):
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('>='), [self, other])
-        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
-                              name=res, command_buffer=cmd_buffer)
+        ndim, shape = getDimShape(self, other)
+        return create_ndarray(ndim, self.dtype, shape=shape,
+                              name=res, command_buffer=cmd_buffer, is_scalar=isScalarResult(self, other))
+
     
     def __rge__(self, other):
         return self < other
@@ -158,8 +181,10 @@ class ndarray:
     def __eq__(self, other):
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('=='), [self, other])
-        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
-                              name=res, command_buffer=cmd_buffer)
+        ndim, shape = getDimShape(self, other)
+        return create_ndarray(ndim, self.dtype, shape=shape,
+                              name=res, command_buffer=cmd_buffer, is_scalar=isScalarResult(self, other))
+
     
     def __req__(self, other):
         return self == other
@@ -167,8 +192,10 @@ class ndarray:
     def __ne__(self, other):
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('!='), [self, other])
-        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
-                              name=res, command_buffer=cmd_buffer)
+        ndim, shape = getDimShape(self, other)
+        return create_ndarray(ndim, self.dtype, shape=shape,
+                              name=res, command_buffer=cmd_buffer, is_scalar=isScalarResult(self, other))
+
     
     def __rne__(self, other):
         return self != other
@@ -176,8 +203,10 @@ class ndarray:
     def __and__(self, other):
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('&'), [self, other])
-        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
-                              name=res, command_buffer=cmd_buffer)
+        ndim, shape = getDimShape(self, other)
+        return create_ndarray(ndim, self.dtype, shape=shape,
+                              name=res, command_buffer=cmd_buffer, is_scalar=isScalarResult(self, other))
+
     
     def __rand__(self, other):
         return self & other
@@ -185,8 +214,10 @@ class ndarray:
     def __or__(self, other):
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('|'), [self, other])
-        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
-                              name=res, command_buffer=cmd_buffer)
+        ndim, shape = getDimShape(self, other)
+        return create_ndarray(ndim, self.dtype, shape=shape,
+                              name=res, command_buffer=cmd_buffer, is_scalar=isScalarResult(self, other))
+
     
     def __ror__(self, other):
         return self | other
@@ -195,13 +226,15 @@ class ndarray:
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('!'), [self])
         return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
-                              name=res, command_buffer=cmd_buffer)
+                              name=res, command_buffer=cmd_buffer, is_scalar=self.is_scalar)
 
     def __mul__(self, other):
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('*'), [self, other])
-        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
-                              name=res, command_buffer=cmd_buffer)
+        ndim, shape = getDimShape(self, other)
+        return create_ndarray(ndim, self.dtype, shape=shape,
+                              name=res, command_buffer=cmd_buffer, is_scalar=isScalarResult(self, other))
+
 
     def __rmul__(self, other):
         return self * other
@@ -209,14 +242,18 @@ class ndarray:
     def __truediv__(self, other):
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('/'), [self, other])
-        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
-                              name=res, command_buffer=cmd_buffer)
+        ndim, shape = getDimShape(self, other)
+        return create_ndarray(ndim, self.dtype, shape=shape,
+                              name=res, command_buffer=cmd_buffer, is_scalar=isScalarResult(self, other))
+
     
     def __rtruediv__(self, other):
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('/'), [1., self/other])
-        return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
-                              name=res, command_buffer=cmd_buffer)
+        ndim, shape = getDimShape(self, other)
+        return create_ndarray(ndim, self.dtype, shape=shape,
+                              name=res, command_buffer=cmd_buffer, is_scalar=isScalarResult(self, other))
+
 
     def __matmul__(self, other):
         is_scalar = False
@@ -247,7 +284,7 @@ class ndarray:
         if self.valid:
             return
         validated_arrays = {self.name : self}
-        cmd = self.command_buffer.get_command(validated_arrays, self.ndim, self.shape)
+        cmd = self.command_buffer.get_command(validated_arrays, self.ndim, self.shape, is_scalar=self.is_scalar)
         reply_size = 0
         for name, arr in validated_arrays.items():
             reply_size += 8 + 8 * arr.ndim
@@ -289,14 +326,13 @@ class ndarray:
     def copy(self):
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('copy'), [self])
-        return create_ndarray(self.ndim, self.dtype,shape=self.shape.copy(),
-                              name=res, command_buffer=cmd_buffer)
-    
+        return create_ndarray(self.ndim, self.dtype,shape=self.shape.copy(), name=res, command_buffer=cmd_buffer, is_scalar=self.is_scalar)
+
     def where(self, other, third):
         res = get_name()
         cmd_buffer = ASTNode(res, OPCODES.get('where'), [other, third, self])
         return create_ndarray(self.ndim, self.dtype, shape=self.shape.copy(),
-                              name=res, command_buffer=cmd_buffer)
+                              name=res, command_buffer=cmd_buffer, is_scalar=self.is_scalar)
     
     def exp(self):
         res = get_name()
