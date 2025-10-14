@@ -273,7 +273,6 @@ class ndarray:
             data_bytes = send_command_raw(Handlers.fetch_handler, cmd, reply_size=total_size)
             return from_bytes(data_bytes, np.dtype(self.dtype).char)
         else:
-            print("GET OSME")
             total_size = self.itemsize
             for i in self.shape:
                 total_size*=i

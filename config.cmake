@@ -1,5 +1,5 @@
-set(CHARM_DIR "/home/anant/winter2024/lbp/study/charm/netlrts-linux-x86_64")
-set(BASE_DIR "/home/anant/sem7/LibCharmtyles")
+set(CHARM_DIR "/home/shogo/master/Kale/charm/netlrts-linux-x86_64")
+set(BASE_DIR "/home/shogo/master/Kale/LibCharmtyles")
 set(EIGEN_DIR "/usr/include/eigen3")
 set(CUDA_DIR  "/path/to/CUDA/directory")
 set(KOKKOS_DIR "${BASE_DIR}/kokkos/install")

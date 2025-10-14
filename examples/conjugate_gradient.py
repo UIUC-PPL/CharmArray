@@ -16,14 +16,16 @@ def solve(A, b, x):
     p = r.copy()
     rsold = r @ r
 
-    for i in range(100):
+    for i in range(20):
         #if i % 10 == 0:
-        gc.collect()
+        # gc.collect()
         Ap = A @ p
         alpha = rsold / (p @ Ap)
 
-        x = lg.axpy(alpha, p, x)
-        r = lg.axpy(alpha, Ap, r, multiplier=-1.)
+        x = alpha * p + x
+        r = alpha * Ap - r
+        # x = lg.axpy(alpha, p, x)
+        # r = lg.axpy(alpha, Ap, r, multiplier=-1.)
 
         rsnew = r @ r
 
@@ -31,7 +33,8 @@ def solve(A, b, x):
         #    print("Converged in %i iterations" % (i + 1))
         #    break
 
-        p = lg.axpy(rsnew / rsold, p, r)
+        p = (rsnew / rsold) * p + r
+        # p = lg.axpy(rsnew / rsold, p, r)
         rsold = rsnew
 
     return x
@@ -42,8 +45,6 @@ if __name__ == '__main__':
     A = ndarray(2, (184, 184), np.float64)
     b = ndarray(1, 184, np.float64)
     x = ndarray(1, 184, np.float64)
-
-    #d = (b @ x).get()
 
     start = time.time()
     x = solve(A, b, x)

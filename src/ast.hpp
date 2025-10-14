@@ -46,7 +46,7 @@ template<typename tensorType, typename tensorAstNodeType>
 std::vector<tensorAstNodeType> faster_tortoise(char *cmd, bool flush = false);
 
 template<typename tensorType, typename tensorAstNodeType>
-std::pair<uint8_t, uint64_t> getMatmulOperand(char* cmd) {
+std::pair<uint8_t, uint64_t> getFlushedOperand(char* cmd) {
   char* recurse_cmd = cmd;
 
   uint8_t marker = extract<uint8_t>(cmd);
@@ -76,6 +76,7 @@ ctop inline to_ctop(uint64_t opcode) noexcept {
     case 3:  return ctop::multiply;
     case 4:  return ctop::divide;
     case 5:  return ctop::matmul;
+    case 6:  return ctop::copy;
     case 11: return ctop::greater;
     case 12: return ctop::lesser;
     case 13: return ctop::geq;
@@ -126,8 +127,6 @@ std::shared_ptr<ct::binary_operator> to_ct_binary(uint64_t opcode, const std::ve
     default: return nullptr;
   }
 }
-
-
 
 template<typename tensorType, typename tensorAstNodeType>
 std::vector<tensorAstNodeType> faster_tortoise(char *cmd, bool flush)
@@ -181,7 +180,7 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd, bool flush)
     rootNode = tensorAstNodeType(-1, ctopcode, to_ct_unary(opcode, args), shape);
   } else if(ctopcode==ctop::binary_expr){
     rootNode = tensorAstNodeType(-1, ctopcode, to_ct_binary(opcode, args), shape);
-  }else {
+  } else {
     rootNode = tensorAstNodeType(ctopcode, shape);
   }
   std::vector<tensorAstNodeType> ast;
@@ -194,10 +193,10 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd, bool flush)
   // 3. a gemm returning a matrix if both the operands are matrices
   if (ctopcode == ctop::matmul) {
     uint32_t operand_size = extract<uint32_t>(cmd);
-    std::pair<uint8_t, uint64_t> xOperandInfo = getMatmulOperand<tensorType, tensorAstNodeType>(cmd);
+    std::pair<uint8_t, uint64_t> xOperandInfo = getFlushedOperand<tensorType, tensorAstNodeType>(cmd);
     cmd += operand_size;
     operand_size = extract<uint32_t>(cmd);
-    std::pair<uint8_t, uint64_t> yOperandInfo = getMatmulOperand<tensorType, tensorAstNodeType>(cmd);
+    std::pair<uint8_t, uint64_t> yOperandInfo = getFlushedOperand<tensorType, tensorAstNodeType>(cmd);
     cmd += operand_size;
 
     const uint8_t& xDim = xOperandInfo.first;
@@ -247,6 +246,18 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd, bool flush)
         return tensorNode;
       }
     }
+  } else if (ctopcode == ctop::copy) {
+    uint32_t operand_size = extract<uint32_t>(cmd);
+    std::pair<uint8_t, uint64_t> copyOperandInfo = getFlushedOperand<tensorType, tensorAstNodeType>(cmd);
+    cmd += operand_size;
+
+    const uint64_t& copyID = copyOperandInfo.second;
+    const auto& copy = std::get<tensorType>(lookup(copyID));
+    tensorType tensor(copy);
+
+    const auto& tensorNode = tensor();
+    insert(tensorID, std::move(tensor));
+    return tensorNode;
   }
 
   if(numOperands <= 2) {

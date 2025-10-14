@@ -36,6 +36,9 @@ class ASTNode(object):
 
     ###############################################################################################################################################
     # Marker determines whether we are dealing with a tensor, a scalar or an arithmetic type                                                      #
+    # Marker = 0 : arithmetic type                                                                                                                #
+    # Marker = 1 : scalar     type                                                                                                                #
+    # Marker = 2 : tensor     type                                                                                                                #
     # Encoding = | Marker | dim | shape | opcode | save_op | ID | NumArgs | Args | NumOperands | OperandEncodingSize | RecursiveOperandEncoding | #
     #            |   8    |  8  |  64   |   32   |   1     | 64 |   32    |  64  |     8       |         32          | ........................ | #
     # NB: If opcode is 0, the encoding is limited to ID                                                                                           #
