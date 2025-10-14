@@ -352,7 +352,6 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd, bool flush) {
   uint32_t opcode = extract<uint32_t>(cmd);
   bool store = extract<bool>(cmd);
   uint64_t tensorID = extract<uint64_t>(cmd);
-  ckout<<"for tensorid "<<tensorID<<" -> "<<store<<endl;
 
   if (opcode == 0) {
     const auto &tmp = std::get<tensorType>(lookup(tensorID));

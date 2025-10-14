@@ -3,38 +3,24 @@ import charmnumeric.linalg as lg
 from charmnumeric.ccs import enable_debug, sync
 from charmnumeric.ast import set_max_depth
 import numpy as np
-import gc
-
 import time
 
-#enable_debug()
 set_max_depth(10)
-#gc.set_threshold(1, 1, 1)
 
 def solve(A, b, x):
     r = b - A @ x
     p = r.copy()
     rsold = r @ r
 
-    for i in range(20):
-        #if i % 10 == 0:
-        # gc.collect()
+    for _ in range(10):
         Ap = A @ p
         alpha = rsold / (p @ Ap)
 
         x = alpha * p + x
         r = alpha * Ap - r
-        # x = lg.axpy(alpha, p, x)
-        # r = lg.axpy(alpha, Ap, r, multiplier=-1.)
-
         rsnew = r @ r
 
-        #if np.sqrt(rsnew.get()) < 1e-8:
-        #    print("Converged in %i iterations" % (i + 1))
-        #    break
-
         p = (rsnew / rsold) * p + r
-        # p = lg.axpy(rsnew / rsold, p, r)
         rsold = rsnew
 
     return x
@@ -42,12 +28,27 @@ def solve(A, b, x):
 if __name__ == '__main__':
     connect("172.17.0.1", 10000)
 
-    A = ndarray(2, (184, 184), np.float64)
-    b = ndarray(1, 184, np.float64)
-    x = ndarray(1, 184, np.float64)
+    n = 184
+
+    A = ndarray(2, (n, n), np.float64, init_value = 1e-4)
+    b = ndarray(1, n, np.float64, init_value = 1e-4)
+    x = ndarray(1, n, np.float64, init_value = 1e-4)
 
     start = time.time()
     x = solve(A, b, x)
-    x.evaluate()
-    sync()
-    print("Execution time = %.6f" % (time.time() - start))
+    x_charm = x.get()
+    print("Execution time (Charm) = %.6f s" % (time.time() - start))
+
+    # Initialize all arrays to 1
+    A = np.ones((n, n), dtype=np.float64) * 1e-4
+    b = np.ones(n, dtype=np.float64) * 1e-4
+    x = np.ones(n, dtype=np.float64) * 1e-4
+
+    start = time.time()
+    x_np = solve(A, b, x)
+    print("Execution time (NumPy) = %.6f s" % (time.time() - start))
+
+    if np.allclose(x_np, x_charm, atol=1e-5):
+        print("[SUCCESS]")
+    else:
+        print("[FAIL]")
