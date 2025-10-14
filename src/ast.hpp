@@ -457,33 +457,24 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd, bool flush) {
     return tensorNode;
   }
 
-  if (numOperands <= 2) {
+  if(numOperands <= 2) {
     uint32_t operand_size = extract<uint32_t>(cmd);
-    std::vector<tensorAstNodeType> left =
-        faster_tortoise<tensorType, tensorAstNodeType>(cmd);
+    std::vector<tensorAstNodeType> left = faster_tortoise<tensorType, tensorAstNodeType>(cmd);
     cmd += operand_size;
     operand_size = extract<uint32_t>(cmd);
-    std::vector<tensorAstNodeType> right =
-        faster_tortoise<tensorType, tensorAstNodeType>(cmd);
+    std::vector<tensorAstNodeType> right = faster_tortoise<tensorType, tensorAstNodeType>(cmd);
     cmd += operand_size;
 
     rootNode.left_ = 1;
     size_t right_size;
-    if (ctopcode == ctop::unary_expr || ctopcode == ctop::logical_not ||
+    if (ctopcode == ctop::unary_expr  ||
+        ctopcode == ctop::logical_not ||
         ctopcode == ctop::custom_expr) {
       rootNode.right_ = -1;
       right_size = 0;
-      left_size = left.size();
-    } else if(ctopcode == ctop::copy){
-      //assuming copy is done on non temps only
-      rootNode.right_ = -1;
-      left_size = 0;
-      right_size = 0;
-      rootNode.copy_id_ = left[0].name_;
     } else {
       rootNode.right_ = left.size() + 1;
       right_size = right.size();
-      left_size = left.size();
     }
 
     ast.reserve(left.size() + right_size + 1);
@@ -491,48 +482,47 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd, bool flush) {
     std::copy(left.begin(), left.end(), std::back_inserter(ast));
 
     if (right_size)
-      std::copy(right.begin(), right.end(), std::back_inserter(ast));
+        std::copy(right.begin(), right.end(), std::back_inserter(ast));
 
     for (int i = 1; i != left.size(); ++i) {
-      if (ast[i].left_ != -1) {
-        ast[i].left_ += 1;
-      }
+        if (ast[i].left_ != -1) {
+            ast[i].left_ += 1;
+        }
 
-      if (ast[i].right_ != -1) {
-        ast[i].right_ += 1;
-      }
+        if (ast[i].right_ != -1) {
+            ast[i].right_ += 1;
+        }
 
-      if (ast[i].ter_ != -1) {
-        ast[i].ter_ += 1;
-      }
+        if (ast[i].ter_ != -1) {
+            ast[i].ter_ += 1;
+        }
     }
 
     for (int i = 1 + left.size(); i != ast.size(); ++i) {
-      if (ast[i].left_ != -1) {
-        ast[i].left_ += 1 + left.size();
-      }
+        if (ast[i].left_ != -1)
+        {
+            ast[i].left_ += 1 + left.size();
+        }
 
-      if (ast[i].right_ != -1) {
-        ast[i].right_ += 1 + left.size();
-      }
+        if (ast[i].right_ != -1)
+        {
+            ast[i].right_ += 1 + left.size();
+        }
 
-      if (ast[i].ter_ != -1) {
-        ast[i].ter_ += 1 + left.size();
-      }
+        if (ast[i].ter_ != -1)
+        {
+            ast[i].ter_ += 1 + left.size();
+        }
     }
-    ckout<<"HERE "<<endl;
   } else {
     uint32_t operand_size = extract<uint32_t>(cmd);
-    std::vector<tensorAstNodeType> left =
-        faster_tortoise<tensorType, tensorAstNodeType>(cmd);
+    std::vector<tensorAstNodeType> left = faster_tortoise<tensorType, tensorAstNodeType>(cmd);
     cmd += operand_size;
     operand_size = extract<uint32_t>(cmd);
-    std::vector<tensorAstNodeType> right =
-        faster_tortoise<tensorType, tensorAstNodeType>(cmd);
+    std::vector<tensorAstNodeType> right = faster_tortoise<tensorType, tensorAstNodeType>(cmd);
     cmd += operand_size;
     operand_size = extract<uint32_t>(cmd);
-    std::vector<tensorAstNodeType> ter =
-        faster_tortoise<tensorType, tensorAstNodeType>(cmd);
+    std::vector<tensorAstNodeType> ter = faster_tortoise<tensorType, tensorAstNodeType>(cmd);
     cmd += operand_size;
 
     rootNode.left_ = 1;
@@ -581,7 +571,6 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd, bool flush) {
   }
   
   if (store or flush) {
-    ckout<<"store through AST break "<<tensorID<<endl;
     tensorType tensor(ast);
     const auto &tensorNode = tensor();
     insert(tensorID, std::move(tensor));
