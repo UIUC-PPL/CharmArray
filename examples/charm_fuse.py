@@ -4,32 +4,24 @@ from charmnumeric.ccs import enable_debug
 import charmnumeric.linalg as lg
 import numpy as np
 import time
-# enable_debug()
 set_max_depth(10)
 
 @charm_fuse
 def f():
-    v = ndarray(1, 50, np.float64, init_value=-20)
-    b = ndarray(1, 50, np.float64, init_value=10)
-    # c = ndarray(1, 50, np.float64, init_value=30)
+    v = ndarray(1, 1e5, np.float64, init_value=-20)
+    b = ndarray(1, 1e5, np.float64, init_value=10)
 
     g1 =  v.abs().scale(2).scale(2).add_constant(29) + b + 32
-    # g1 = 151
     g2 = b.log(2).exp()
-    # g2 = 27.(..)
     d = g1 + g2
     return d.get()
 
-# @charm_fuse
 def g():
-    v = ndarray(1, 50, np.float64, init_value=-20)
-    b = ndarray(1, 50, np.float64, init_value=10)
-    # c = ndarray(1, 50, np.float64, init_value=30)
+    v = ndarray(1, 1e5, np.float64, init_value=-20)
+    b = ndarray(1, 1e5, np.float64, init_value=10)
 
     g1 =  v.abs().scale(2).scale(2).add_constant(29) + b + 32
-    # g1 = 151
     g2 = b.log(2).exp()
-    # g2 = 27.(..)
     d = g1 + g2
     return d.get()
 
