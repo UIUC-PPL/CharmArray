@@ -39,7 +39,7 @@ template <typename T> inline T peek(char *&msg) noexcept {
 }
 
 template <typename tensorType, typename tensorAstNodeType>
-std::vector<tensorAstNodeType> faster_tortoise(char *cmd, bool flush = false);
+std::vector<tensorAstNodeType> process_tensor(char *cmd, bool flush = false);
 
 template <typename tensorType, typename tensorAstNodeType>
 std::pair<uint8_t, uint64_t> getFlushedOperand(char *cmd) {
@@ -57,7 +57,7 @@ std::pair<uint8_t, uint64_t> getFlushedOperand(char *cmd) {
 
   uint32_t opcode = extract<uint32_t>(cmd);
   if (opcode)
-    faster_tortoise<tensorType, tensorAstNodeType>(recurse_cmd, true);
+    process_tensor<tensorType, tensorAstNodeType>(recurse_cmd, true);
 
   cmd += sizeof(bool);
 
@@ -176,7 +176,7 @@ to_ct_binary(uint64_t opcode, const std::vector<double> &args) noexcept {
   }
 }
 
-double slower_hare(char *cmd) {
+double process_scalar(char *cmd) {
   uint8_t marker = extract<uint8_t>(cmd);
   if (marker == 0)
     return extract<double>(cmd);
@@ -191,8 +191,8 @@ double slower_hare(char *cmd) {
   if (ctopcode == ctop::noop)
     return std::get<double>(lookup(tensorID));
 
-  /* multLineFuse = */ extract<bool>(cmd);
-  /* customOpArgs = */ extract<uint32_t>(cmd);
+  /* multLineFuse    = */ extract<bool>(cmd);
+  /* NumcustomOpArgs = */ extract<uint32_t>(cmd);
 
   if (ctopcode == ctop::unary_expr || ctopcode == ctop::binary_expr)
     CmiAbort("Custom Ops are not defined for scalar type");
@@ -233,7 +233,7 @@ double slower_hare(char *cmd) {
 
   if (numOperands == 1) {
     uint32_t operand_size = extract<uint32_t>(cmd);
-    double lhs = slower_hare(cmd);
+    double lhs = process_scalar(cmd);
     cmd += operand_size;
 
     switch (ctopcode) {
@@ -248,10 +248,10 @@ double slower_hare(char *cmd) {
     }
   } else if (numOperands == 2) {
     uint32_t operand_size = extract<uint32_t>(cmd);
-    double lhs = slower_hare(cmd);
+    double lhs = process_scalar(cmd);
     cmd += operand_size;
     operand_size = extract<uint32_t>(cmd);
-    double rhs = slower_hare(cmd);
+    double rhs = process_scalar(cmd);
     cmd += operand_size;
 
     switch (ctopcode) {
@@ -290,15 +290,15 @@ double slower_hare(char *cmd) {
     }
   } else if (numOperands == 3) {
     uint32_t operand_size = extract<uint32_t>(cmd);
-    double lhs = slower_hare(cmd);
+    double lhs = process_scalar(cmd);
     cmd += operand_size;
 
     operand_size = extract<uint32_t>(cmd);
-    double rhs = slower_hare(cmd);
+    double rhs = process_scalar(cmd);
     cmd += operand_size;
 
     operand_size = extract<uint32_t>(cmd);
-    double ths = slower_hare(cmd);
+    double ths = process_scalar(cmd);
     cmd += operand_size;
 
     switch (ctopcode) {
@@ -316,9 +316,9 @@ double slower_hare(char *cmd) {
 }
 
 template <typename tensorType, typename tensorAstNodeType>
-std::vector<tensorAstNodeType> faster_tortoise(char *cmd, bool flush) {
+std::vector<tensorAstNodeType> process_tensor(char *cmd, bool flush) {
   if(peek<uint8_t>(cmd) == 1) {
-    double result = slower_hare(cmd);
+    double result = process_scalar(cmd);
     if constexpr (std::is_same_v<tensorType, ct::vector>) {
       tensorAstNodeType temp_node(0, ctop::broadcast, result, {1});
       return {temp_node};
@@ -461,10 +461,10 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd, bool flush) {
 
   if(numOperands <= 2) {
     uint32_t operand_size = extract<uint32_t>(cmd);
-    std::vector<tensorAstNodeType> left = faster_tortoise<tensorType, tensorAstNodeType>(cmd);
+    std::vector<tensorAstNodeType> left = process_tensor<tensorType, tensorAstNodeType>(cmd);
     cmd += operand_size;
     operand_size = extract<uint32_t>(cmd);
-    std::vector<tensorAstNodeType> right = faster_tortoise<tensorType, tensorAstNodeType>(cmd);
+    std::vector<tensorAstNodeType> right = process_tensor<tensorType, tensorAstNodeType>(cmd);
     cmd += operand_size;
 
     rootNode.left_ = 1;
@@ -518,13 +518,13 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd, bool flush) {
     }
   } else {
     uint32_t operand_size = extract<uint32_t>(cmd);
-    std::vector<tensorAstNodeType> left = faster_tortoise<tensorType, tensorAstNodeType>(cmd);
+    std::vector<tensorAstNodeType> left = process_tensor<tensorType, tensorAstNodeType>(cmd);
     cmd += operand_size;
     operand_size = extract<uint32_t>(cmd);
-    std::vector<tensorAstNodeType> right = faster_tortoise<tensorType, tensorAstNodeType>(cmd);
+    std::vector<tensorAstNodeType> right = process_tensor<tensorType, tensorAstNodeType>(cmd);
     cmd += operand_size;
     operand_size = extract<uint32_t>(cmd);
-    std::vector<tensorAstNodeType> ter = faster_tortoise<tensorType, tensorAstNodeType>(cmd);
+    std::vector<tensorAstNodeType> ter = process_tensor<tensorType, tensorAstNodeType>(cmd);
     cmd += operand_size;
 
     rootNode.left_ = 1;

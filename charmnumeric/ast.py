@@ -7,7 +7,7 @@ from charmnumeric.ccs import OPCODES, INV_OPCODES, to_bytes
 
 
 max_depth = 10
-multi_line_merge = False
+multiLineFuse = False
 
 def set_max_depth(d):
     global max_depth
@@ -20,12 +20,12 @@ def get_max_depth():
 
 def charm_fuse(func):
     def compile_wrapper(*args, **kwargs):
-        global multi_line_merge
+        global multiLineFuse
         orig_max_depth = get_max_depth()
-        multi_line_merge = True
+        multiLineFuse = True
         set_max_depth(float('inf'))
         out = func(*args, **kwargs)
-        multi_line_merge = False
+        multiLineFuse = False
         set_max_depth(orig_max_depth)
         return out
     return compile_wrapper
@@ -33,6 +33,7 @@ def charm_fuse(func):
 class ASTNode(object):
     def __init__(self, name, opcode, operands, args=[]):
         from charmtiles.array import ndarray
+        global multiLineFuse
         # contains opcode, operands
         # operands are ndarrays
         self.name = name
@@ -40,7 +41,7 @@ class ASTNode(object):
         self.operands = operands
         self.depth = 0
         self.args = args
-        self.muli_line_merge = multi_line_merge
+        self.multiLineFuse = multiLineFuse
         if self.opcode != 0:
             for op in self.operands:
                 if isinstance(op, ndarray):
@@ -51,7 +52,7 @@ class ASTNode(object):
     # Marker = 0 : arithmetic type                                                                                                                                  #
     # Marker = 1 : scalar     type                                                                                                                                  #
     # Marker = 2 : tensor     type                                                                                                                                  #
-    # Encoding = | Marker | dim | shape | opcode | save_op | ID | multiLineMerge | NumArgs | Args | NumOperands | OperandEncodingSize | RecursiveOperandEncoding |  #
+    # Encoding = | Marker | dim | shape | opcode | save_op | ID | multiLineFuse  | NumArgs | Args | NumOperands | OperandEncodingSize | RecursiveOperandEncoding |  #
     #            |   8    |  8  |  64   |   32   |   1     | 64 |       1        |   32    |  64  |     8       |         32          | ........................ |  #
     # NB: If opcode is 0, the encoding is limited to ID                                                                                                             #
     # Encoding = | Marker | shape |  val  |                                                                                                                         #
@@ -74,7 +75,7 @@ class ASTNode(object):
             cmd += to_bytes(0, 'I') + to_bytes(False, '?') + to_bytes(self.operands[0].name, 'L')
             return cmd
 
-        cmd += to_bytes(self.opcode, 'I') + to_bytes(save, '?') + to_bytes(self.name, 'L') + to_bytes(self.muli_line_merge, '?')
+        cmd += to_bytes(self.opcode, 'I') + to_bytes(save, '?') + to_bytes(self.name, 'L') + to_bytes(self.multiLineFuse, '?')
         cmd += to_bytes(len(self.args), 'I')
         for arg in self.args:
             cmd += to_bytes(arg, 'd')
