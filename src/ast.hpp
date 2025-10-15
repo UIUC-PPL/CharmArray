@@ -459,7 +459,29 @@ std::vector<tensorAstNodeType> process_tensor(char *cmd, bool flush) {
     return tensorNode;
   }
 
-  if(numOperands <= 2) {
+  if(numOperands == 1){
+    uint32_t operand_size = extract<uint32_t>(cmd);
+    std::vector<tensorAstNodeType> left = process_tensor<tensorType, tensorAstNodeType>(cmd);
+    cmd += operand_size;
+    rootNode.left_ = 1;
+    rootNode.right_ = -1;
+    ast.reserve(left.size() + 1);
+    ast.emplace_back(rootNode);
+    std::copy(left.begin(), left.end(), std::back_inserter(ast));
+    for (int i = 1; i != left.size(); ++i) {
+      if (ast[i].left_ != -1) {
+          ast[i].left_ += 1;
+      }
+
+      if (ast[i].right_ != -1) {
+          ast[i].right_ += 1;
+      }
+
+      if (ast[i].ter_ != -1) {
+          ast[i].ter_ += 1;
+      }
+  }
+  } else if(numOperands == 2) {
     uint32_t operand_size = extract<uint32_t>(cmd);
     std::vector<tensorAstNodeType> left = process_tensor<tensorType, tensorAstNodeType>(cmd);
     cmd += operand_size;
@@ -468,23 +490,12 @@ std::vector<tensorAstNodeType> process_tensor(char *cmd, bool flush) {
     cmd += operand_size;
 
     rootNode.left_ = 1;
-    size_t right_size;
-    if (ctopcode == ctop::unary_expr  ||
-        ctopcode == ctop::logical_not ||
-        ctopcode == ctop::custom_expr) {
-      rootNode.right_ = -1;
-      right_size = 0;
-    } else {
-      rootNode.right_ = left.size() + 1;
-      right_size = right.size();
-    }
+    rootNode.right_ = left.size() + 1;
 
-    ast.reserve(left.size() + right_size + 1);
+    ast.reserve(left.size() + right.size() + 1);
     ast.emplace_back(rootNode);
     std::copy(left.begin(), left.end(), std::back_inserter(ast));
-
-    if (right_size)
-        std::copy(right.begin(), right.end(), std::back_inserter(ast));
+    std::copy(right.begin(), right.end(), std::back_inserter(ast));
 
     for (int i = 1; i != left.size(); ++i) {
         if (ast[i].left_ != -1) {
