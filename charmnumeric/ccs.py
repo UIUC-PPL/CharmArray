@@ -9,10 +9,6 @@ client_id = 0
 next_name = 0
 epoch = 0
 
-### custom opcodes
-# EXP, LOG, ABS, NEGATE, SQUARE, SQRT, RECIPROCAL, SIN, COS, RELU, SCALE, ADD_CONSTANT, ADD, SUBTRACT, 
-# MULTIPLY, DIVIDE, POWER, MODULO, MAX, MIN, GREATER_THAN, LESS_THAN, EQUAL, ATAN2, WEIGHTED_AVERAGE
-
 OPCODES = {
     # base_op
     '+': 1,

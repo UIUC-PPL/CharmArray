@@ -7,7 +7,7 @@ from charmnumeric.ccs import OPCODES, INV_OPCODES, to_bytes
 
 
 max_depth = 10
-
+multiLineFuse = False
 
 def set_max_depth(d):
     global max_depth
@@ -18,10 +18,22 @@ def get_max_depth():
     global max_depth
     return max_depth
 
+def charm_fuse(func):
+    def compile_wrapper(*args, **kwargs):
+        global multiLineFuse
+        orig_max_depth = get_max_depth()
+        multiLineFuse = True
+        set_max_depth(float('inf'))
+        out = func(*args, **kwargs)
+        multiLineFuse = False
+        set_max_depth(orig_max_depth)
+        return out
+    return compile_wrapper
 
 class ASTNode(object):
     def __init__(self, name, opcode, operands, args=[]):
         from charmtiles.array import ndarray
+        global multiLineFuse
         # contains opcode, operands
         # operands are ndarrays
         self.name = name
@@ -29,23 +41,24 @@ class ASTNode(object):
         self.operands = operands
         self.depth = 0
         self.args = args
+        self.multiLineFuse = multiLineFuse
         if self.opcode != 0:
             for op in self.operands:
                 if isinstance(op, ndarray):
                     self.depth = max(self.depth, 1 + op.command_buffer.depth)
 
-    ###############################################################################################################################################
-    # Marker determines whether we are dealing with a tensor, a scalar or an arithmetic type                                                      #
-    # Marker = 0 : arithmetic type                                                                                                                #
-    # Marker = 1 : scalar     type                                                                                                                #
-    # Marker = 2 : tensor     type                                                                                                                #
-    # Encoding = | Marker | dim | shape | opcode | save_op | ID | NumArgs | Args | NumOperands | OperandEncodingSize | RecursiveOperandEncoding | #
-    #            |   8    |  8  |  64   |   32   |   1     | 64 |   32    |  64  |     8       |         32          | ........................ | #
-    # NB: If opcode is 0, the encoding is limited to ID                                                                                           #
-    # Encoding = | Marker | shape |  val  |                                                                                                       #
-    #            |   8    |  64   |  64   |                                                                                                       #
-    # NB: Latter encoding for double constants                                                                                                    #
-    ###############################################################################################################################################
+    #################################################################################################################################################################
+    # Marker determines whether we are dealing with a tensor, a scalar or an arithmetic type                                                                        #
+    # Marker = 0 : arithmetic type                                                                                                                                  #
+    # Marker = 1 : scalar     type                                                                                                                                  #
+    # Marker = 2 : tensor     type                                                                                                                                  #
+    # Encoding = | Marker | dim | shape | opcode | save_op | ID | multiLineFuse  | NumArgs | Args | NumOperands | OperandEncodingSize | RecursiveOperandEncoding |  #
+    #            |   8    |  8  |  64   |   32   |   1     | 64 |       1        |   32    |  64  |     8       |         32          | ........................ |  #
+    # NB: If opcode is 0, the encoding is limited to ID                                                                                                             #
+    # Encoding = | Marker | shape |  val  |                                                                                                                         #
+    #            |   8    |  64   |  64   |                                                                                                                         #
+    # NB: Latter encoding for double constants                                                                                                                      #
+    #################################################################################################################################################################
     def get_command(self, validated_arrays, ndim, shape, save=True, is_scalar=False):
         from charmnumeric.array import ndarray
 
@@ -62,7 +75,7 @@ class ASTNode(object):
             cmd += to_bytes(0, 'I') + to_bytes(False, '?') + to_bytes(self.operands[0].name, 'L')
             return cmd
 
-        cmd += to_bytes(self.opcode, 'I') + to_bytes(save, '?') + to_bytes(self.name, 'L')
+        cmd += to_bytes(self.opcode, 'I') + to_bytes(save, '?') + to_bytes(self.name, 'L') + to_bytes(self.multiLineFuse, '?')
         cmd += to_bytes(len(self.args), 'I')
         for arg in self.args:
             cmd += to_bytes(arg, 'd')
