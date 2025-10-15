@@ -7,7 +7,7 @@ from charmnumeric.ccs import OPCODES, INV_OPCODES, to_bytes
 
 
 max_depth = 10
-
+multi_line_merge = False
 
 def set_max_depth(d):
     global max_depth
@@ -18,6 +18,17 @@ def get_max_depth():
     global max_depth
     return max_depth
 
+def charm_fuse(func):
+    def compile_wrapper(*args, **kwargs):
+        global multi_line_merge
+        orig_max_depth = get_max_depth()
+        multi_line_merge = True
+        set_max_depth(float('inf'))
+        out = func(*args, **kwargs)
+        multi_line_merge = False
+        set_max_depth(orig_max_depth)
+        return out
+    return compile_wrapper
 
 class ASTNode(object):
     def __init__(self, name, opcode, operands, args=[]):
@@ -29,6 +40,7 @@ class ASTNode(object):
         self.operands = operands
         self.depth = 0
         self.args = args
+        self.muli_line_merge = multi_line_merge
         if self.opcode != 0:
             for op in self.operands:
                 if isinstance(op, ndarray):
@@ -62,7 +74,7 @@ class ASTNode(object):
             cmd += to_bytes(0, 'I') + to_bytes(False, '?') + to_bytes(self.operands[0].name, 'L')
             return cmd
 
-        cmd += to_bytes(self.opcode, 'I') + to_bytes(save, '?') + to_bytes(self.name, 'L')
+        cmd += to_bytes(self.opcode, 'I') + to_bytes(save, '?') + to_bytes(self.name, 'L') + to_bytes(self.muli_line_merge, '?')
         cmd += to_bytes(len(self.args), 'I')
         for arg in self.args:
             cmd += to_bytes(arg, 'd')

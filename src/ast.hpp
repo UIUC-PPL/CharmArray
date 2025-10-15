@@ -191,6 +191,7 @@ double slower_hare(char *cmd) {
   if (ctopcode == ctop::noop)
     return std::get<double>(lookup(tensorID));
 
+  /* multLineFuse = */ extract<bool>(cmd);
   /* customOpArgs = */ extract<uint32_t>(cmd);
 
   if (ctopcode == ctop::unary_expr || ctopcode == ctop::binary_expr)
@@ -357,6 +358,7 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd, bool flush) {
     const auto &tmp = std::get<tensorType>(lookup(tensorID));
     return tmp();
   }
+  bool multiLineFuse = extract<bool>(cmd);
 
   // Args for custom unops/binops
   uint32_t numArgs = extract<uint32_t>(cmd);
@@ -375,6 +377,7 @@ std::vector<tensorAstNodeType> faster_tortoise(char *cmd, bool flush) {
   } else {
     rootNode = tensorAstNodeType(ctopcode, shape);
   }
+  rootNode.multiLineFuse = multiLineFuse;
   std::vector<tensorAstNodeType> ast;
 
   uint8_t numOperands = extract<uint8_t>(cmd);
