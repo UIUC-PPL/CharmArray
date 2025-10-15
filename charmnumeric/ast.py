@@ -46,18 +46,18 @@ class ASTNode(object):
                 if isinstance(op, ndarray):
                     self.depth = max(self.depth, 1 + op.command_buffer.depth)
 
-    ###############################################################################################################################################
-    # Marker determines whether we are dealing with a tensor, a scalar or an arithmetic type                                                      #
-    # Marker = 0 : arithmetic type                                                                                                                #
-    # Marker = 1 : scalar     type                                                                                                                #
-    # Marker = 2 : tensor     type                                                                                                                #
-    # Encoding = | Marker | dim | shape | opcode | save_op | ID | NumArgs | Args | NumOperands | OperandEncodingSize | RecursiveOperandEncoding | #
-    #            |   8    |  8  |  64   |   32   |   1     | 64 |   32    |  64  |     8       |         32          | ........................ | #
-    # NB: If opcode is 0, the encoding is limited to ID                                                                                           #
-    # Encoding = | Marker | shape |  val  |                                                                                                       #
-    #            |   8    |  64   |  64   |                                                                                                       #
-    # NB: Latter encoding for double constants                                                                                                    #
-    ###############################################################################################################################################
+    #################################################################################################################################################################
+    # Marker determines whether we are dealing with a tensor, a scalar or an arithmetic type                                                                        #
+    # Marker = 0 : arithmetic type                                                                                                                                  #
+    # Marker = 1 : scalar     type                                                                                                                                  #
+    # Marker = 2 : tensor     type                                                                                                                                  #
+    # Encoding = | Marker | dim | shape | opcode | save_op | ID | multiLineMerge | NumArgs | Args | NumOperands | OperandEncodingSize | RecursiveOperandEncoding |  #
+    #            |   8    |  8  |  64   |   32   |   1     | 64 |       1        |   32    |  64  |     8       |         32          | ........................ |  #
+    # NB: If opcode is 0, the encoding is limited to ID                                                                                                             #
+    # Encoding = | Marker | shape |  val  |                                                                                                                         #
+    #            |   8    |  64   |  64   |                                                                                                                         #
+    # NB: Latter encoding for double constants                                                                                                                      #
+    #################################################################################################################################################################
     def get_command(self, validated_arrays, ndim, shape, save=True, is_scalar=False):
         from charmnumeric.array import ndarray
 
