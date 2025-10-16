@@ -269,18 +269,22 @@ class ndarray:
             self.command_buffer.plot_graph()
         if self.valid:
             return
-        validated_arrays = []
+        validated_arrays = {self.name : self}
         cmd = self.command_buffer.get_command(validated_arrays, self.ndim, self.shape, is_scalar=self.is_scalar)
+        reply_size = 0
+        for name, arr in validated_arrays.items():
+            reply_size += 8 + 8 * arr.ndim
         if not debug:
             cmd = to_bytes(deletion_buffer_size, 'I') + deletion_buffer + cmd
             cmd = to_bytes(get_epoch(), 'i') + to_bytes(len(cmd), 'I') + cmd
             send_command_async(Handlers.operation_handler, cmd)
             deletion_buffer = b''
             deletion_buffer_size = 0
-            for arr in validated_arrays:
+            for i in range(len(validated_arrays)):
+                arr = validated_arrays[name]
                 arr.validate()
         else:
-            for arr in validated_arrays:
+            for name, arr in validated_arrays.items():
                 arr.validate()
         self.validate()
 
@@ -303,7 +307,7 @@ class ndarray:
 
     def validate(self):
         self.valid = True
-        self.command_buffer = ASTNode(self.name, 0, [weakref.proxy(self)])
+        self.command_buffer = ASTNode(self.name, 0, [self])
 
     def copy(self):
         res = get_name()
