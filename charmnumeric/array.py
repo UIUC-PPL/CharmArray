@@ -269,19 +269,13 @@ class ndarray:
             self.command_buffer.plot_graph()
         if self.valid:
             return
-        validated_arrays = []
-        cmd = self.command_buffer.get_command(validated_arrays, self.ndim, self.shape, is_scalar=self.is_scalar)
+        cmd = self.command_buffer.get_command(self.ndim, self.shape, is_scalar=self.is_scalar)
         if not debug:
             cmd = to_bytes(deletion_buffer_size, 'I') + deletion_buffer + cmd
             cmd = to_bytes(get_epoch(), 'i') + to_bytes(len(cmd), 'I') + cmd
             send_command_async(Handlers.operation_handler, cmd)
             deletion_buffer = b''
             deletion_buffer_size = 0
-            for arr in validated_arrays:
-                arr.validate()
-        else:
-            for arr in validated_arrays:
-                arr.validate()
         self.validate()
 
     def get(self):
