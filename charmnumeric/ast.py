@@ -83,7 +83,7 @@ class ASTNode(object):
         cmd += to_bytes(len(self.operands), 'B')
         for op in self.operands:
             if isinstance(op, ndarray):
-                if op.name in validated_arrays:
+                if op.valid or op.name in validated_arrays:
                     if op.is_scalar:
                         opcmd = to_bytes(1, 'B')
                     else:
@@ -95,8 +95,8 @@ class ASTNode(object):
                 else:
                     save_op = True if c_long.from_address(id(op)).value - 2 > 0 else False
                     opcmd = op.command_buffer.get_command(validated_arrays, op.ndim, op.shape, save=save_op, is_scalar=op.is_scalar)
-                    if not op.valid and save_op:
-                        validated_arrays[op.name] = op
+                    if save_op:
+                        validated_arrays.append(op)
             elif isinstance(op, float) or isinstance(op, int):
                 opcmd = to_bytes(0, 'B')
                 for _shape in shape:
