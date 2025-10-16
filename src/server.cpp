@@ -105,6 +105,7 @@ void Main::handle_command(int epoch, uint8_t kind, uint32_t size, char *cmd)
     while (!command_buffer.empty() && std::get<0>(command_buffer.top()) == EPOCH)
     {
       buffer_t buffer = command_buffer.top();
+      // CkPrintf("Executing buffered at epoch %i, current %i\n", std::get<0>(buffer), EPOCH);
       execute_command(std::get<0>(buffer), std::get<1>(buffer), (int)size, std::get<2>(buffer));
       free(std::get<2>(buffer));
       command_buffer.pop();
@@ -131,8 +132,10 @@ void Main::send_reply(int epoch, int size, char *msg)
 
 void Main::execute_operation(int epoch, int size, char *cmd) {
   uint32_t num_deletions = extract<uint32_t>(cmd);
-  for (int i = 0; i < num_deletions; i++)
+  for (int i = 0; i < num_deletions; i++) {
+    ckout << "TENSOR TO REMOVE> " << peek<ct_name_t>(cmd) << endl;
     remove(extract<ct_name_t>(cmd));
+  }
   char* dimPos  = cmd + sizeof(uint8_t);
   if (peek<uint8_t>(cmd) == 1) process_scalar(cmd);
   else if (peek<uint8_t>(dimPos) == 1) process_tensor<ct::vector, ct::vec_impl::vec_node>(cmd);
@@ -202,16 +205,16 @@ void Main::execute_creation(int epoch, int size, char *cmd)
     if (has_buf)
     {
       double *init_buf = (double *)cmd;
-      res = ct::from_vector_unique(init_buf, size);
+      res = ct::from_vector(init_buf, size);
     }
     else if (has_init)
     {
       double init_value = extract<double>(cmd);
-      res = std::make_unique<ct::vector>(size, init_value);
+      res = ct::vector(size, init_value);
     }
     else
     {
-      res = std::make_unique<ct::vector>(size);
+      res = ct::vector(size);
     }
     insert(res_name, std::move(res));
     break;
@@ -225,16 +228,16 @@ void Main::execute_creation(int epoch, int size, char *cmd)
     if (has_buf)
     {
       double *init_buf = (double *)cmd;
-      res = ct::from_matrix_unique(init_buf, size1, size2);
+      res = ct::from_matrix(init_buf, size1, size2);
     }
     else if (has_init)
     {
       double init_value = extract<double>(cmd);
-      res = std::make_unique<ct::matrix>(size1, size2, init_value);
+      res = ct::matrix(size1, size2, init_value);
     }
     else
     {
-      res = std::make_unique<ct::matrix>(size1, size2);
+      res = ct::matrix(size1, size2);
     }
     insert(res_name, std::move(res));
     break;
@@ -249,39 +252,38 @@ void Main::execute_creation(int epoch, int size, char *cmd)
 void Main::execute_fetch(int epoch, int size, char *cmd)
 {
   ct_name_t name = extract<ct_name_t>(cmd);
-  ckout << "FETCHING> " << name << endl;
   ct_array_t &arr = lookup(name);
   char *reply = nullptr;
   int reply_size = 0;
   std::visit(
-    [&](auto &x)
-    {
-      using T = std::decay_t<decltype(x)>;
-      if constexpr (std::is_same_v<T, double>)
+      [&](auto &x)
       {
-        reply = (char *)&x;
-        reply_size += 8;
-        send_reply(epoch, reply_size, reply);
-      }
-      else if constexpr (std::is_same_v<T, std::unique_ptr<ct::vector>>)
-      {
-        std::vector<double> values = x->get();
-        reply = (char *)values.data();
-        reply_size += values.size() * sizeof(double);
-        send_reply(epoch, reply_size, reply);
-      }
-      else if constexpr (std::is_same_v<T, std::unique_ptr<ct::matrix>>)
-      {
-        std::vector<std::vector<double>> values = x->get();
-        std::vector<double> flat;
-        for (const auto &row : values)
-          flat.insert(flat.end(), row.begin(), row.end());
-        reply = reinterpret_cast<char *>(flat.data());
-        reply_size += flat.size() * sizeof(double);
-        send_reply(epoch, reply_size, reply);
-      }
-    },
-    arr);
+        using T = std::decay_t<decltype(x)>;
+        if constexpr (std::is_same_v<T, double>)
+        {
+          reply = (char *)&x;
+          reply_size += 8;
+          send_reply(epoch, reply_size, reply);
+        }
+        else if constexpr (std::is_same_v<T, ct::vector>)
+        {
+          std::vector<double> values = x.get();
+          reply = (char *)values.data();
+          reply_size += values.size() * sizeof(double);
+          send_reply(epoch, reply_size, reply);
+        }
+        else if constexpr (std::is_same_v<T, ct::matrix>)
+        {
+          std::vector<std::vector<double>> values = x.get();
+          std::vector<double> flat;
+          for (const auto &row : values)
+            flat.insert(flat.end(), row.begin(), row.end());
+          reply = reinterpret_cast<char *>(flat.data());
+          reply_size += flat.size() * sizeof(double);
+          send_reply(epoch, reply_size, reply);
+        }
+      },
+      arr);
 }
 
 void Main::execute_delete(int epoch, int size, char *cmd)
