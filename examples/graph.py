@@ -14,7 +14,8 @@ def f():
     for _ in range(2):
         k = v * 2 + b + 3 + c - 32
         l = k >= 42
-        print(l.get())
+        l.get()
+    print(l.get())
     # print(l.get())
     # v1 = v @ b
     # v1 = (b + c) @ (b - c)
