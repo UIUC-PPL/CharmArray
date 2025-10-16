@@ -11,8 +11,11 @@ def f():
     v = ndarray(1, 10, np.float64, init_value=2)
     b = ndarray(1, 10, np.float64, init_value=1)
     c = ndarray(1, 10, np.float64, init_value=3)
-    # k = v * 2 + b + 3 + c - 32
-    # l = k >= 42
+    for _ in range(2):
+        k = v * 2 + b + 3 + c - 32
+        l = k >= 42
+        print(l.get())
+    # print(l.get())
     # v1 = v @ b
     # v1 = (b + c) @ (b - c)
     # q.get()
@@ -32,14 +35,14 @@ def f():
     # final_res = res + 42
 
     # q.get()
-    a1 = b @ c
-    print(a1.get())
-    a2 = v @ c
-    print(a2.get())
-    res = (a1 / a2) * b + c
-    v = 2
-    # a3 = a1 + a2
-    print(v.get())
+    # a1 = b @ c
+    # print(a1.get())
+    # a2 = v @ c
+    # print(a2.get())
+    # res = (a1 / a2) * b + c
+    # v = 2
+    # # a3 = a1 + a2
+    # print(v.get())
     # res = a3 * v
     # w = c @ b
     # w.get()

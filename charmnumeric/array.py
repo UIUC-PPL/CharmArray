@@ -96,20 +96,6 @@ class ndarray:
     def __len__(self):
         return self.shape[0]
 
-    #def __str__(self):
-    #    print(self.get())
-
-    #def __repr__(self):
-    #    #self._flush_command_buffer()
-    #    # FIXME add repr
-    #    pass
-
-    def __setitem__(self, key, value):
-        if not isinstance(key, slice) or key.start != None or \
-                key.stop != None or key.step != None:
-            raise ValueError("Can't set items or slices")
-        self.cmd_buffer = ASTNode(res, OPCODES.get('setitem'), [self, value])
-
     def __neg__(self):
         return self * -1
 

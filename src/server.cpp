@@ -130,18 +130,12 @@ void Main::send_reply(int epoch, int size, char *msg)
   server.reply_buffer.erase(epoch);
 }
 
-void Main::execute_operation(int epoch, int size, char *cmd)
-{
-  // first delete arrays
+void Main::execute_operation(int epoch, int size, char *cmd) {
   uint32_t num_deletions = extract<uint32_t>(cmd);
-  // CkPrintf("Num deletions = %u\n", num_deletions);
-  CkPrintf("Memory usage before delete is %f MB\n", CmiMemoryUsage() / (1024. * 1024.));
-  for (int i = 0; i < num_deletions; i++)
-  {
-    ct_name_t name = extract<ct_name_t>(cmd);
-    remove(name);
+  for (int i = 0; i < num_deletions; i++) {
+    ckout << "TENSOR TO REMOVE> " << peek<ct_name_t>(cmd) << endl;
+    remove(extract<ct_name_t>(cmd));
   }
-  CkPrintf("Memory usage after %u deletions is %f MB\n", num_deletions, CmiMemoryUsage() / (1024. * 1024.));
   char* dimPos  = cmd + sizeof(uint8_t);
   if (peek<uint8_t>(cmd) == 1) process_scalar(cmd);
   else if (peek<uint8_t>(dimPos) == 1) process_tensor<ct::vector, ct::vec_impl::vec_node>(cmd);
@@ -201,8 +195,7 @@ void Main::execute_creation(int epoch, int size, char *cmd)
   {
   case 0:
   {
-    // create scalar
-    CmiAbort("Not implemented");
+    CmiAbort("Scalars can only be made through reduction ops and matmuls");
   }
   case 1:
   {
@@ -251,7 +244,6 @@ void Main::execute_creation(int epoch, int size, char *cmd)
   }
   default:
   {
-    // FIXME is this correctly caught?
     CmiAbort("Greater than 2 dimensions not supported");
   }
   }
@@ -298,10 +290,7 @@ void Main::execute_delete(int epoch, int size, char *cmd)
 {
   uint32_t num_deletions = extract<uint32_t>(cmd);
   for (int i = 0; i < num_deletions; i++)
-  {
-    ct_name_t name = extract<ct_name_t>(cmd);
-    remove(name);
-  }
+    remove(extract<ct_name_t>(cmd));
 }
 
 void Main::execute_disconnect(int epoch, int size, char *cmd)

@@ -85,25 +85,25 @@ ctop inline to_ctop(uint64_t opcode) noexcept {
     return ctop::matmul;
   case 6:
     return ctop::copy;
-  case 11:
+  case 9:
     return ctop::greater;
-  case 12:
+  case 10:
     return ctop::lesser;
-  case 13:
+  case 11:
     return ctop::geq;
-  case 14:
+  case 12:
     return ctop::leq;
-  case 15:
+  case 13:
     return ctop::eq;
-  case 16:
+  case 14:
     return ctop::neq;
-  case 17:
+  case 15:
     return ctop::logical_and;
-  case 18:
+  case 16:
     return ctop::logical_or;
-  case 19:
+  case 17:
     return ctop::logical_not;
-  case 20:
+  case 18:
     return ctop::where;
   default:
     return ctop::noop;
@@ -459,7 +459,7 @@ std::vector<tensorAstNodeType> process_tensor(char *cmd, bool flush) {
     return tensorNode;
   }
 
-  if(numOperands == 1){
+  if (numOperands == 1) {
     uint32_t operand_size = extract<uint32_t>(cmd);
     std::vector<tensorAstNodeType> left = process_tensor<tensorType, tensorAstNodeType>(cmd);
     cmd += operand_size;
@@ -480,8 +480,8 @@ std::vector<tensorAstNodeType> process_tensor(char *cmd, bool flush) {
       if (ast[i].ter_ != -1) {
           ast[i].ter_ += 1;
       }
-  }
-  } else if(numOperands == 2) {
+    }
+  } else if (numOperands == 2) {
     uint32_t operand_size = extract<uint32_t>(cmd);
     std::vector<tensorAstNodeType> left = process_tensor<tensorType, tensorAstNodeType>(cmd);
     cmd += operand_size;
