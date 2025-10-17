@@ -28,16 +28,11 @@ def solve(A, b, x):
 if __name__ == '__main__':
     connect("172.17.0.1", 10000)
 
-    n = int(1e4)
+    n = 184
 
-    A = ndarray(2, (n, n), np.float64, init_value = 1e-6)
-    b = ndarray(1, n, np.float64, init_value = 1e-6)
-    x = ndarray(1, n, np.float64, init_value = 1e-6)
-
-    # Pre-Compilation
-    _ = solve(A, b, x)
-    __ = _.get()
-    print(__)
+    A = ndarray(2, (n, n), np.float64, init_value = 1e-4)
+    b = ndarray(1, n, np.float64, init_value = 1e-4)
+    x = ndarray(1, n, np.float64, init_value = 1e-4)
 
     start = time.time()
     x = solve(A, b, x)
@@ -45,9 +40,9 @@ if __name__ == '__main__':
     print("Execution time (Charm) = %.6f s" % (time.time() - start))
 
     # Initialize all arrays to 1
-    A = np.ones((n, n), dtype=np.float64) * 1e-6
-    b = np.ones(n, dtype=np.float64) * 1e-6
-    x = np.ones(n, dtype=np.float64) * 1e-6
+    A = np.ones((n, n), dtype=np.float64) * 1e-4
+    b = np.ones(n, dtype=np.float64) * 1e-4
+    x = np.ones(n, dtype=np.float64) * 1e-4
 
     start = time.time()
     x_np = solve(A, b, x)

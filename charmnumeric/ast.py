@@ -59,7 +59,7 @@ class ASTNode(object):
     #            |   8    |  64   |  64   |                                                                                                                         #
     # NB: Latter encoding for double constants                                                                                                                      #
     #################################################################################################################################################################
-    def get_command(self, ndim, shape, save=True, is_scalar=False):
+    def get_command(self, validated_arrays, ndim, shape, save=True, is_scalar=False):
         from charmnumeric.array import ndarray
 
         # Ndims and Shape setup
@@ -83,7 +83,7 @@ class ASTNode(object):
         cmd += to_bytes(len(self.operands), 'B')
         for op in self.operands:
             if isinstance(op, ndarray):
-                if op.valid:
+                if op.name in validated_arrays:
                     if op.is_scalar:
                         opcmd = to_bytes(1, 'B')
                     else:
@@ -94,9 +94,9 @@ class ASTNode(object):
                     opcmd += to_bytes(0, 'I') + to_bytes(False, '?') + to_bytes(op.name, 'L')
                 else:
                     save_op = True if c_long.from_address(id(op)).value - 2 > 0 else False
-                    opcmd = op.command_buffer.get_command(op.ndim, op.shape, save=save_op, is_scalar=op.is_scalar)
-                    if save_op:
-                        op.validate()
+                    opcmd = op.command_buffer.get_command(validated_arrays, op.ndim, op.shape, save=save_op, is_scalar=op.is_scalar)
+                    if not op.valid and save_op:
+                        validated_arrays[op.name] = op
             elif isinstance(op, float) or isinstance(op, int):
                 opcmd = to_bytes(0, 'B')
                 for _shape in shape:

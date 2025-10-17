@@ -10,6 +10,15 @@ def get_version():
     exec(compile(open(fname).read(), fname, 'exec'), data)
     return data.get('__version__')
 
+
+def compile_server():
+    charmc = os.environ.get('CHARMC',
+                            '/home/adityapb/charm/charm/netlrts-linux-x86_64/bin/charmc')
+    aum_base = os.environ.get('AUM_HOME', '/home/adityapb/charm/LibCharmtyles')
+    subprocess.run(["make", "-C", "src/",
+                    "CHARMC=%s" % charmc, "BASE_DIR=%s" % aum_base])
+
+
 install_requires = ['numpy', 'charm4py']
 tests_require = ['pytest']
 docs_require = ['sphinx']
@@ -29,6 +38,8 @@ Topic :: Software Development :: Libraries
 Topic :: Utilities
 '''
 classifiers = [x.strip() for x in classes.splitlines() if x]
+
+compile_server()
 
 setup(
     name='charmnumeric',

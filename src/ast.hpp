@@ -7,11 +7,10 @@
 #include <unordered_map>
 #include <variant>
 #include <vector>
-#include <memory>
 
 using ctop = ct::util::Operation;
 using ct_name_t = uint64_t;
-using ct_array_t = std::variant<double, std::unique_ptr<ct::vector>, std::unique_ptr<ct::matrix>>;
+using ct_array_t = std::variant<double, ct::vector, ct::matrix>;
 std::unordered_map<ct_name_t, ct_array_t> symbol_table;
 
 inline static void insert(ct_name_t name, ct_array_t arr) {
@@ -86,25 +85,25 @@ ctop inline to_ctop(uint64_t opcode) noexcept {
     return ctop::matmul;
   case 6:
     return ctop::copy;
-  case 9:
-    return ctop::greater;
-  case 10:
-    return ctop::lesser;
   case 11:
-    return ctop::geq;
+    return ctop::greater;
   case 12:
-    return ctop::leq;
+    return ctop::lesser;
   case 13:
-    return ctop::eq;
+    return ctop::geq;
   case 14:
-    return ctop::neq;
+    return ctop::leq;
   case 15:
-    return ctop::logical_and;
+    return ctop::eq;
   case 16:
-    return ctop::logical_or;
+    return ctop::neq;
   case 17:
-    return ctop::logical_not;
+    return ctop::logical_and;
   case 18:
+    return ctop::logical_or;
+  case 19:
+    return ctop::logical_not;
+  case 20:
     return ctop::where;
   default:
     return ctop::noop;
@@ -218,10 +217,10 @@ double process_scalar(char *cmd) {
     const uint64_t &yID = yOperandInfo.second;
 
     if (xDim == 1 and yDim == 1) {
-      const auto &x = std::get<std::unique_ptr<ct::vector>>(lookup(xID));
-      const auto &y = std::get<std::unique_ptr<ct::vector>>(lookup(yID));
+      const auto &x = std::get<ct::vector>(lookup(xID));
+      const auto &y = std::get<ct::vector>(lookup(yID));
 
-      ct::scalar tensor0D = ct::dot(*x, *y);
+      ct::scalar tensor0D = ct::dot(x, y);
       double result = tensor0D.get();
       insert(tensorID, result);
       return result;
@@ -356,8 +355,8 @@ std::vector<tensorAstNodeType> process_tensor(char *cmd, bool flush) {
   uint64_t tensorID = extract<uint64_t>(cmd);
 
   if (opcode == 0) {
-    const auto &tmp = std::get<std::unique_ptr<tensorType>>(lookup(tensorID));
-    return (*tmp)();
+    const auto &tmp = std::get<tensorType>(lookup(tensorID));
+    return tmp();
   }
   bool multiLineFuse = extract<bool>(cmd);
 
@@ -404,10 +403,10 @@ std::vector<tensorAstNodeType> process_tensor(char *cmd, bool flush) {
     const uint64_t &yID = yOperandInfo.second;
 
     if (xDim == 1 and yDim == 1) {
-      const auto &x = std::get<std::unique_ptr<ct::vector>>(lookup(xID));
-      const auto &y = std::get<std::unique_ptr<ct::vector>>(lookup(yID));
+      const auto &x = std::get<ct::vector>(lookup(xID));
+      const auto &y = std::get<ct::vector>(lookup(yID));
 
-      ct::scalar tensor0D = ct::dot(*x, *y);
+      ct::scalar tensor0D = ct::dot(x, y);
       double result = tensor0D.get();
 
       insert(tensorID, result);
@@ -415,31 +414,31 @@ std::vector<tensorAstNodeType> process_tensor(char *cmd, bool flush) {
       return {temp_node};
     } else if constexpr (std::is_same_v<tensorType, ct::vector>) {
       if (xDim == 1 and yDim == 2) {
-        const auto &x = std::get<std::unique_ptr<ct::vector>>(lookup(xID));
-        const auto &y = std::get<std::unique_ptr<ct::matrix>>(lookup(yID));
+        const auto &x = std::get<ct::vector>(lookup(xID));
+        const auto &y = std::get<ct::matrix>(lookup(yID));
 
-        std::unique_ptr<ct::vector> tensor = std::make_unique<ct::vector>(std::move(ct::dot(*x, *y)));
-        const auto &tensorNode = (*tensor)();
+        ct::vector tensor = ct::dot(x, y);
+        const auto &tensorNode = tensor();
         insert(tensorID, std::move(tensor));
 
         return tensorNode;
       } else if (xDim == 2 and yDim == 1) {
-        const auto &x = std::get<std::unique_ptr<ct::matrix>>(lookup(xID));
-        const auto &y = std::get<std::unique_ptr<ct::vector>>(lookup(yID));
+        const auto &x = std::get<ct::matrix>(lookup(xID));
+        const auto &y = std::get<ct::vector>(lookup(yID));
 
-        std::unique_ptr<ct::vector> tensor = std::make_unique<ct::vector>(std::move(ct::dot(*x, *y)));
-        const auto &tensorNode = (*tensor)();
+        ct::vector tensor = ct::dot(x, y);
+        const auto &tensorNode = tensor();
         insert(tensorID, std::move(tensor));
 
         return tensorNode;
       }
     } else if constexpr (std::is_same_v<tensorType, ct::matrix>) {
       if (xDim == 2 and yDim == 2) {
-        const auto &x = std::get<std::unique_ptr<ct::matrix>>(lookup(xID));
-        const auto &y = std::get<std::unique_ptr<ct::matrix>>(lookup(yID));
+        const auto &x = std::get<ct::matrix>(lookup(xID));
+        const auto &y = std::get<ct::matrix>(lookup(yID));
 
-        std::unique_ptr<ct::matrix> tensor = std::make_unique<ct::matrix>(std::move(ct::matmul(*x, *y)));
-        const auto &tensorNode = (*tensor)();
+        ct::matrix tensor = ct::matmul(x, y);
+        const auto &tensorNode = tensor();
         insert(tensorID, std::move(tensor));
 
         return tensorNode;
@@ -452,15 +451,15 @@ std::vector<tensorAstNodeType> process_tensor(char *cmd, bool flush) {
     cmd += operand_size;
 
     const uint64_t &copyID = copyOperandInfo.second;
-    const auto &copy = std::get<std::unique_ptr<tensorType>>(lookup(copyID));
-    std::unique_ptr<tensorType> tensor = std::make_unique<tensorType>(*copy);
+    const auto &copy = std::get<tensorType>(lookup(copyID));
+    tensorType tensor(copy);
 
-    const auto &tensorNode = (*tensor)();
+    const auto &tensorNode = tensor();
     insert(tensorID, std::move(tensor));
     return tensorNode;
   }
 
-  if (numOperands == 1) {
+  if(numOperands == 1){
     uint32_t operand_size = extract<uint32_t>(cmd);
     std::vector<tensorAstNodeType> left = process_tensor<tensorType, tensorAstNodeType>(cmd);
     cmd += operand_size;
@@ -481,8 +480,8 @@ std::vector<tensorAstNodeType> process_tensor(char *cmd, bool flush) {
       if (ast[i].ter_ != -1) {
           ast[i].ter_ += 1;
       }
-    }
-  } else if (numOperands == 2) {
+  }
+  } else if(numOperands == 2) {
     uint32_t operand_size = extract<uint32_t>(cmd);
     std::vector<tensorAstNodeType> left = process_tensor<tensorType, tensorAstNodeType>(cmd);
     cmd += operand_size;
@@ -585,8 +584,8 @@ std::vector<tensorAstNodeType> process_tensor(char *cmd, bool flush) {
   }
   
   if (store or flush) {
-    std::unique_ptr<tensorType> tensor = std::make_unique<tensorType>(ast);
-    const auto &tensorNode = (*tensor)();
+    tensorType tensor(ast);
+    const auto &tensorNode = tensor();
     insert(tensorID, std::move(tensor));
     return tensorNode;
   }
