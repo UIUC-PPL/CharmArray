@@ -17,8 +17,6 @@ OPCODES = {
     '/': 4,
     '@': 5,
     'copy': 6,
-    'setitem': 7,
-    'pow': 8,
     '>': 9,
     '<': 10,
     '>=': 11,
@@ -117,7 +115,7 @@ def connect(server_ip, server_port):
 
 def disconnect():
     from charmnumeric.array import deletion_buffer, deletion_buffer_size
-    global client_id, deletion_buffer, deletion_buffer_size
+    global client_id
     if deletion_buffer_size > 0:
         cmd = to_bytes(len(deletion_buffer), 'I') + deletion_buffer
         cmd = to_bytes(get_epoch(), 'i') + to_bytes(len(cmd), 'I') + cmd
