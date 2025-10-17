@@ -32,7 +32,7 @@ def charm_fuse(func):
 
 class ASTNode(object):
     def __init__(self, name, opcode, operands, args=[]):
-        from charmnumeric.array import ndarray
+        from charmtiles.array import ndarray
         global multiLineFuse
         # contains opcode, operands
         # operands are ndarrays
