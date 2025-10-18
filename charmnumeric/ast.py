@@ -32,7 +32,7 @@ def charm_fuse(func):
 
 class ASTNode(object):
     def __init__(self, name, opcode, operands, args=[]):
-        from charmtiles.array import ndarray
+        from charmnumeric.array import ndarray
         global multiLineFuse
         # contains opcode, operands
         # operands are ndarrays
@@ -59,7 +59,7 @@ class ASTNode(object):
     #            |   8    |  64   |  64   |                                                                                                                         #
     # NB: Latter encoding for double constants                                                                                                                      #
     #################################################################################################################################################################
-    def get_command(self, ndim, shape, save=True, is_scalar=False):
+    def get_command(self, ndim, shape, save=True, is_scalar=False, hasExceededMaxAstDepth=False):
         from charmnumeric.array import ndarray
 
         # Ndims and Shape setup
@@ -93,7 +93,11 @@ class ASTNode(object):
                         opcmd += to_bytes(_shape, 'L')
                     opcmd += to_bytes(0, 'I') + to_bytes(False, '?') + to_bytes(op.name, 'L')
                 else:
-                    save_op = True if c_long.from_address(id(op)).value - 2 > 0 else False
+                    ### this will only be true when AST is being flushed because of exceeding max depth and ensures that unnecessary temporaries are not saved
+                    if hasExceededMaxAstDepth:
+                        save_op = True if c_long.from_address(id(op)).value - 4 > 0 else False
+                    else:
+                        save_op = True if c_long.from_address(id(op)).value - 2 > 0 else False
                     opcmd = op.command_buffer.get_command(op.ndim, op.shape, save=save_op, is_scalar=op.is_scalar)
                     if save_op:
                         op.validate()

@@ -17,15 +17,31 @@ std::unordered_map<ct_name_t, ct_array_t> symbol_table;
 inline static void insert(ct_name_t name, ct_array_t arr) {
   CkPrintf("Created array %" PRIu64 " on server\n", name);
   symbol_table[name] = std::move(arr);
+  { 
+    ckout<<"Available Symbols"<<endl;
+      for(const auto& it : symbol_table){
+        ckout<<it.first<<" ";
+      }
+      ckout<<endl;
+  }
 }
 
-inline static void remove(ct_name_t name) noexcept { symbol_table.erase(name); }
+inline static void remove(ct_name_t name) noexcept { 
+  ckout<<"removing " << name<<endl;
+  symbol_table.erase(name); 
+}
 
 static ct_array_t &lookup(ct_name_t name) {
   auto find = symbol_table.find(name);
   CkPrintf("Looking up array %" PRIu64 " on server\n", name);
   if (find == std::end(symbol_table))
-    CmiAbort("Symbol%" PRIu64 "not found", name);
+    { ckout<<"Available Symbols"<<endl;
+      for(const auto& it : symbol_table){
+        ckout<<it.first<<" ";
+      }
+      ckout<<endl;
+      
+      CmiAbort("Symbol%" PRIu64 "not found", name);}
   return find->second;
 }
 

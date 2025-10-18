@@ -4,18 +4,24 @@ from charmnumeric.ccs import enable_debug
 import charmnumeric.linalg as lg
 import numpy as np
 
-#enable_debug()
-set_max_depth(10)
-
+# enable_debug()
+set_max_depth(2)
 def f():
     v = ndarray(1, 10, np.float64, init_value=2)
     b = ndarray(1, 10, np.float64, init_value=1)
     c = ndarray(1, 10, np.float64, init_value=3)
-    for _ in range(2):
-        k = v * 2 + b + 3 + c - 32
-        l = k >= 42
-        l.get()
-    print(l.get())
+    a = ndarray(1, 10, np.float64, init_value=4)
+    # vx = [a, b]
+    for _ in range(1):
+        k = a + b + c + v
+        k.get()
+        # prog
+        # k + -> k temp object -> ref k
+        # + operation
+        # tree
+        # op (generate command)
+        # l.get()
+    # print(k.get())
     # print(l.get())
     # v1 = v @ b
     # v1 = (b + c) @ (b - c)
@@ -69,6 +75,6 @@ def f():
 
 
 if __name__ == '__main__':
-    connect("172.17.0.1", 10000)
+    connect("127.0.0.1", 10000)
     s = f()
 

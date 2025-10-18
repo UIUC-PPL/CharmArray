@@ -85,7 +85,7 @@ class ndarray:
                 if is_debug():
                     print("Maximum AST depth exceeded for %i, "
                           "flushing buffer" % self.name)
-                self._flush_command_buffer()
+                self._flush_command_buffer(hasExceededMaxAstDepth=True)
 
     def __del__(self):
         global deletion_buffer, deletion_buffer_size
@@ -260,7 +260,7 @@ class ndarray:
         return create_ndarray(res_ndim, self.dtype, shape=shape,
                               name=res, command_buffer=cmd_buffer, is_scalar=is_scalar)
 
-    def _flush_command_buffer(self):
+    def _flush_command_buffer(self, hasExceededMaxAstDepth=False):
         # send the command to server
         # finally set command buffer to array name
         global deletion_buffer, deletion_buffer_size
@@ -269,7 +269,7 @@ class ndarray:
             self.command_buffer.plot_graph()
         if self.valid:
             return
-        cmd = self.command_buffer.get_command(self.ndim, self.shape, is_scalar=self.is_scalar)
+        cmd = self.command_buffer.get_command(self.ndim, self.shape, is_scalar=self.is_scalar, hasExceededMaxAstDepth=hasExceededMaxAstDepth)
         if not debug:
             cmd = to_bytes(deletion_buffer_size, 'I') + deletion_buffer + cmd
             cmd = to_bytes(get_epoch(), 'i') + to_bytes(len(cmd), 'I') + cmd
