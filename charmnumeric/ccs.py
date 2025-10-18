@@ -114,14 +114,16 @@ def connect(server_ip, server_port):
         atexit.register(disconnect)
 
 def disconnect():
-    from charmnumeric.array import deletion_buffer, deletion_buffer_size
+    from charmnumeric.array import deletion_buffer, deletion_buffer_size, deferred_deletion_buffer_size, deferred_deletion_buffer
     global client_id
-    if deletion_buffer_size > 0:
-        cmd = to_bytes(len(deletion_buffer), 'I') + deletion_buffer
+    if (deletion_buffer_size > 0) or (deferred_deletion_buffer_size > 0):
+        cmd = to_bytes(deletion_buffer_size, 'I') + deletion_buffer + to_bytes(deferred_deletion_buffer_size, 'I') + deferred_deletion_buffer
         cmd = to_bytes(get_epoch(), 'i') + to_bytes(len(cmd), 'I') + cmd
         send_command_async(Handlers.delete_handler, cmd)
         deletion_buffer = b''
-        deletion_buffer_size = b''
+        deletion_buffer_size = 0
+        deferred_deletion_buffer = b''
+        deferred_deletion_buffer_size = 0
     cmd = to_bytes(client_id, 'B')
     cmd = to_bytes(get_epoch(), 'i') + to_bytes(len(cmd), 'I') + cmd
     send_command_async(Handlers.disconnection_handler, cmd)

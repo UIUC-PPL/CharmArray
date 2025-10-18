@@ -286,6 +286,8 @@ class ndarray:
             send_command_async(Handlers.operation_handler, cmd)
             deletion_buffer = b''
             deletion_buffer_size = 0
+            deferred_deletion_buffer = b''
+            deferred_deletion_buffer_size = 0
         self.validate()
 
     def get(self):

@@ -294,6 +294,9 @@ void Main::execute_delete(int epoch, int size, char *cmd)
   uint32_t num_deletions = extract<uint32_t>(cmd);
   for (int i = 0; i < num_deletions; i++)
     remove(extract<ct_name_t>(cmd));
+  uint32_t num_deferred_deletions = extract<uint32_t>(cmd);
+  for (int i = 0; i < num_deferred_deletions; i++)
+    remove(extract<ct_name_t>(cmd));
 }
 
 void Main::execute_disconnect(int epoch, int size, char *cmd)
