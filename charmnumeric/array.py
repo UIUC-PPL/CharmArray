@@ -96,20 +96,6 @@ class ndarray:
     def __len__(self):
         return self.shape[0]
 
-    #def __str__(self):
-    #    print(self.get())
-
-    #def __repr__(self):
-    #    #self._flush_command_buffer()
-    #    # FIXME add repr
-    #    pass
-
-    def __setitem__(self, key, value):
-        if not isinstance(key, slice) or key.start != None or \
-                key.stop != None or key.step != None:
-            raise ValueError("Can't set items or slices")
-        self.cmd_buffer = ASTNode(res, OPCODES.get('setitem'), [self, value])
-
     def __neg__(self):
         return self * -1
 
@@ -283,23 +269,13 @@ class ndarray:
             self.command_buffer.plot_graph()
         if self.valid:
             return
-        validated_arrays = {self.name : self}
-        cmd = self.command_buffer.get_command(validated_arrays, self.ndim, self.shape, is_scalar=self.is_scalar)
-        reply_size = 0
-        for name, arr in validated_arrays.items():
-            reply_size += 8 + 8 * arr.ndim
+        cmd = self.command_buffer.get_command(self.ndim, self.shape, is_scalar=self.is_scalar)
         if not debug:
             cmd = to_bytes(deletion_buffer_size, 'I') + deletion_buffer + cmd
             cmd = to_bytes(get_epoch(), 'i') + to_bytes(len(cmd), 'I') + cmd
             send_command_async(Handlers.operation_handler, cmd)
             deletion_buffer = b''
             deletion_buffer_size = 0
-            for i in range(len(validated_arrays)):
-                arr = validated_arrays[name]
-                arr.validate()
-        else:
-            for name, arr in validated_arrays.items():
-                arr.validate()
         self.validate()
 
     def get(self):
@@ -321,7 +297,7 @@ class ndarray:
 
     def validate(self):
         self.valid = True
-        self.command_buffer = ASTNode(self.name, 0, [self])
+        self.command_buffer = ASTNode(self.name, 0, [weakref.proxy(self)])
 
     def copy(self):
         res = get_name()
