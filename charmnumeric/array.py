@@ -11,6 +11,9 @@ from charmnumeric.ccs import to_bytes, from_bytes, send_command_raw, send_comman
 
 deletion_buffer = b''
 deletion_buffer_size = 0
+doDeferredDeletions = False
+deferred_deletion_buffer = b''
+deferred_deletion_buffer_size = 0
 
 
 def create_ndarray(ndim, dtype, shape=None, name=None, command_buffer=None, is_scalar=False):
@@ -88,10 +91,17 @@ class ndarray:
                 self._flush_command_buffer(hasExceededMaxAstDepth=True)
 
     def __del__(self):
-        global deletion_buffer, deletion_buffer_size
-        if self.valid:
-            deletion_buffer += to_bytes(self.name, 'L')
-            deletion_buffer_size += 1
+        global doDeferredDeletions
+        if doDeferredDeletions:
+            global deferred_deletion_buffer, deferred_deletion_buffer_size
+            if self.valid:
+                deferred_deletion_buffer += to_bytes(self.name, 'L')
+                deferred_deletion_buffer_size += 1
+        else:
+            global deletion_buffer, deletion_buffer_size
+            if self.valid:
+                deletion_buffer += to_bytes(self.name, 'L')
+                deletion_buffer_size += 1
 
     def __len__(self):
         return self.shape[0]
@@ -263,7 +273,7 @@ class ndarray:
     def _flush_command_buffer(self, hasExceededMaxAstDepth=False):
         # send the command to server
         # finally set command buffer to array name
-        global deletion_buffer, deletion_buffer_size
+        global deletion_buffer, deletion_buffer_size, deferred_deletion_buffer, deferred_deletion_buffer_size
         debug = is_debug()
         if debug:
             self.command_buffer.plot_graph()
@@ -271,7 +281,7 @@ class ndarray:
             return
         cmd = self.command_buffer.get_command(self.ndim, self.shape, is_scalar=self.is_scalar, hasExceededMaxAstDepth=hasExceededMaxAstDepth)
         if not debug:
-            cmd = to_bytes(deletion_buffer_size, 'I') + deletion_buffer + cmd
+            cmd = to_bytes(deletion_buffer_size, 'I') + deletion_buffer + to_bytes(deferred_deletion_buffer_size, 'I') + deferred_deletion_buffer + cmd
             cmd = to_bytes(get_epoch(), 'i') + to_bytes(len(cmd), 'I') + cmd
             send_command_async(Handlers.operation_handler, cmd)
             deletion_buffer = b''
@@ -296,8 +306,11 @@ class ndarray:
         self._flush_command_buffer()
 
     def validate(self):
+        global doDeferredDeletions
         self.valid = True
+        doDeferredDeletions = True
         self.command_buffer = ASTNode(self.name, 0, [weakref.proxy(self)])
+        doDeferredDeletions = False
 
     def copy(self):
         res = get_name()

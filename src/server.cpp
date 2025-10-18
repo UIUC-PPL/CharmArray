@@ -133,10 +133,16 @@ void Main::execute_operation(int epoch, int size, char *cmd) {
   uint32_t num_deletions = extract<uint32_t>(cmd);
   for (int i = 0; i < num_deletions; i++)
     remove(extract<ct_name_t>(cmd));
+  uint32_t num_deferred_deletions = extract<uint32_t>(cmd);
+  std::vector<ct_name_t> deferred_deletions; deferred_deletions.reserve(num_deferred_deletions);
+  for (int i = 0; i < num_deferred_deletions; i++)
+    deferred_deletions.emplace_back(extract<ct_name_t>(cmd));
   char* dimPos  = cmd + sizeof(uint8_t);
   if (peek<uint8_t>(cmd) == 1) process_scalar(cmd);
   else if (peek<uint8_t>(dimPos) == 1) process_tensor<ct::vector, ct::vec_impl::vec_node>(cmd);
   else if (peek<uint8_t>(dimPos) == 2) process_tensor<ct::matrix, ct::mat_impl::mat_node>(cmd);
+  for(const auto& it : deferred_deletions)
+    remove(it);
 }
 
 void Main::execute_command(int epoch, uint8_t kind, int size, char *cmd)

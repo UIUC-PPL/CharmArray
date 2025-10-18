@@ -6,15 +6,23 @@ import numpy as np
 
 # enable_debug()
 set_max_depth(2)
+
 def f():
-    v = ndarray(1, 10, np.float64, init_value=2)
+    a = ndarray(1, 10, np.float64, init_value=4)
     b = ndarray(1, 10, np.float64, init_value=1)
     c = ndarray(1, 10, np.float64, init_value=3)
-    a = ndarray(1, 10, np.float64, init_value=4)
+    d = ndarray(1, 10, np.float64, init_value=2)
     # vx = [a, b]
     for _ in range(1):
-        k = a + b + c + v
-        k.get()
+        e = a + b + c + d
+        f = e + a
+        print(f.get())
+        # e = a + b * d - c + 42 - 34
+        # f = e + c / a + 32 - b
+        # g = f.scale(69) + 53 - a / 32
+        # g = f + d
+        # k = a + b + c + v
+        # k.get()
         # prog
         # k + -> k temp object -> ref k
         # + operation
