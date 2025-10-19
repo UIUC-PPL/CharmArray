@@ -49,7 +49,7 @@ void connection_handler(char *msg)
 
 void disconnection_handler(char *msg)
 {
-  CkExit();
+  ct::sync();
   char *cmd = msg + CmiMsgHeaderSizeBytes;
   int epoch = extract<int>(cmd);
   uint32_t size = extract<uint32_t>(cmd);

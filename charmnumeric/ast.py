@@ -99,7 +99,7 @@ class ASTNode(object):
                     else:
                         save_op = True if c_long.from_address(id(op)).value - 2 > 0 else False
                     opcmd = op.command_buffer.get_command(op.ndim, op.shape, save=save_op, is_scalar=op.is_scalar)
-                    if save_op:
+                    if save_op or (op.command_buffer.opcode == OPCODES.get('@')) or (op.command_buffer.opcode == OPCODES.get('copy')):
                         op.validate()
             elif isinstance(op, float) or isinstance(op, int):
                 opcmd = to_bytes(0, 'B')

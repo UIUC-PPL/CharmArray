@@ -1,7 +1,7 @@
 import struct
 import atexit
 from pyccs import Server
-from charmnumeric import array
+import gc
 
 debug = False
 server = None
@@ -114,8 +114,16 @@ def connect(server_ip, server_port):
         atexit.register(disconnect)
 
 def disconnect():
+    # cleanup the remaining ndarrays
+    from charmnumeric.array import ndarray
+    deleted_id = []
+    for obj in gc.get_objects():
+        if isinstance(obj, ndarray):
+            if not obj.name in deleted_id:
+                print(obj.name)
+                deleted_id.append(obj.name)
+                obj.__del__()
     from charmnumeric.array import deletion_buffer, deletion_buffer_size, deferred_deletion_buffer_size, deferred_deletion_buffer
-    global client_id
     if (deletion_buffer_size > 0) or (deferred_deletion_buffer_size > 0):
         cmd = to_bytes(deletion_buffer_size, 'I') + deletion_buffer + to_bytes(deferred_deletion_buffer_size, 'I') + deferred_deletion_buffer
         cmd = to_bytes(get_epoch(), 'i') + to_bytes(len(cmd), 'I') + cmd
@@ -124,6 +132,7 @@ def disconnect():
         deletion_buffer_size = 0
         deferred_deletion_buffer = b''
         deferred_deletion_buffer_size = 0
+    global client_id
     cmd = to_bytes(client_id, 'B')
     cmd = to_bytes(get_epoch(), 'i') + to_bytes(len(cmd), 'I') + cmd
     send_command_async(Handlers.disconnection_handler, cmd)
