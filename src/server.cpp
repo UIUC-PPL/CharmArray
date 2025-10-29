@@ -310,6 +310,7 @@ void Main::execute_disconnect(int epoch, int size, char *cmd)
 
 void Main::execute_sync(int epoch, int size, char *cmd)
 {
+  ct::sync();
   CkPrintf("Execution time = %f\n", CkTimer() - start_time);
   bool r = true;
   send_reply(epoch, 1, (char *)&r);
