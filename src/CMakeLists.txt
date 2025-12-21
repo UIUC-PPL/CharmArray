@@ -6,8 +6,11 @@ include(${CMAKE_SOURCE_DIR}/../config.cmake)
 set(Kokkos_ROOT ${KOKKOS_DIR})
 find_package(Kokkos 4.5 REQUIRED CONFIG)
 
-set(KokkosKernels_DIR ${KOKKOS_KERNELS_DIR}/lib/cmake/KokkosKernels)
+set(KokkosKernels_DIR ${KOKKOS_KERNELS_DIR}/lib64/cmake/KokkosKernels)
 find_package(KokkosKernels REQUIRED)
+
+option(Charm_ENABLE_GPU "Enable GPU backend" OFF)
+
 
 if(Charm_ENABLE_GPU)
     message(STATUS "Building for a GPU backend")
@@ -26,6 +29,7 @@ add_custom_command(
     OUTPUT  ${BASE_DIR}/charmtyles/backend/libcharmtyles.decl.h
     COMMAND ${CMAKE_COMMAND} -E chdir ${BASE_DIR}/charmtyles/backend
             ${CHARMC} ${BASE_DIR}/charmtyles/backend/charmtyles.ci
+            $<$<BOOL:${Charm_ENABLE_GPU}>:-DGPU_BACKEND>
     DEPENDS ${BASE_DIR}/charmtyles/backend/charmtyles.ci
     COMMENT "Processing charmtyles ci files"
 )
@@ -40,7 +44,7 @@ add_custom_command(
 
 if(Charm_ENABLE_GPU)
     add_library(server OBJECT server.cpp ${BASE_DIR}/charmtyles/backend/libcharmtyles.decl.h ${CMAKE_SOURCE_DIR}/server.decl.h)
-    target_include_directories(server PRIVATE ${BASE_DIR} ${BASE_DIR}/charmtyles/backend ${EIGEN_DIR}/include ${CHARM_DIR}/include)
+    target_include_directories(server PRIVATE ${BASE_DIR} ${BASE_DIR}/charmtyles/backend ${EIGEN_DIR}/include/eigen3 ${CHARM_DIR}/include)
     target_link_libraries(server Kokkos::kokkos Kokkos::kokkoskernels)
 
     add_custom_command(
@@ -55,6 +59,6 @@ if(Charm_ENABLE_GPU)
     )
 else()
     add_executable(server.out server.cpp ${BASE_DIR}/charmtyles/backend/libcharmtyles.decl.h ${CMAKE_SOURCE_DIR}/server.decl.h)
-    target_include_directories(server.out PRIVATE ${BASE_DIR} ${BASE_DIR}/charmtyles/backend ${EIGEN_DIR})
+    target_include_directories(server.out PRIVATE ${BASE_DIR} ${BASE_DIR}/charmtyles/backend ${EIGEN_DIR}/include/eigen3)
     target_link_libraries(server.out Kokkos::kokkos Kokkos::kokkoskernels)
 endif()

@@ -78,10 +78,31 @@ Main::Main(CkArgMsg *msg)
   server = Server();
   Server::initialize();
   register_handlers();
-  ct::init();
+  int argc = msg->argc;
+  char** argv = msg->argv;
+  std::size_t vec_len = 1ULL << 26;
+  std::size_t row_len = 1ULL << 13;
+  std::size_t col_len = 1ULL << 13;
+
+  for (int i = 1; i < argc; ++i) {
+    // -v 1024
+    if (strcmp(argv[i], "-v") == 0 && i + 1 < argc) {
+      vec_len = static_cast<std::size_t>(strtoull(argv[++i], nullptr, 0));
+    }
+    // -r 512 
+    else if (strcmp(argv[i], "-r") == 0 && i + 1 < argc) {
+      row_len = static_cast<std::size_t>(strtoull(argv[++i], nullptr, 0));
+    } 
+    // -c 512
+    else if (strcmp(argv[i], "-c") == 0 && i + 1 < argc) {
+      col_len = static_cast<std::size_t>(strtoull(argv[++i], nullptr, 0));
+    }
+  }
+  ct::init(vec_len, row_len, col_len);
 #ifndef NDEBUG
   CkPrintf("Initialization done\n");
 #endif
+
 }
 
 void Main::register_handlers()
@@ -306,6 +327,7 @@ void Main::execute_disconnect(int epoch, int size, char *cmd)
 #ifndef NDEBUG
   CkPrintf("Disconnected %" PRIu8 " from server\n", client_id);
 #endif
+  CkExit();
 }
 
 void Main::execute_sync(int epoch, int size, char *cmd)
