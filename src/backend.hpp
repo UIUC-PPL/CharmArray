@@ -7,11 +7,17 @@
 
 #include "charmnumeric.decl.h"
 
-// Fixed tile sizes for array decomposition.
-// All arrays (regardless of global size) use these tile dimensions.
-#define CT_TILE_1D 64
-#define CT_TILE_2D 64
-#define CT_TILE_3D 64
+#ifdef USE_KOKKOS
+#define CT_MIN_TILE_1D 1048576
+#define CT_MIN_TILE_2D 1024
+#define CT_MIN_TILE_3D 128
+#else
+#define CT_MIN_TILE_1D 1048576
+#define CT_MIN_TILE_2D 1024
+#define CT_MIN_TILE_3D 128
+#endif
+
+#define CT_MAX_OFFSET 16
 
 // ---- Partition traits: map N -> concrete Charm++ chare/proxy/index types ----
 

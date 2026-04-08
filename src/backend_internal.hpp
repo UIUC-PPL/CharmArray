@@ -133,31 +133,44 @@ inline void eigen_gemm_sub(T* a_data, int a_full_cols,
 }
 #endif
 
-/// Helper: compute the tile size for a given number of dimensions.
-inline int ct_tile(int ndims) {
+/// Round up to the next power of 2 (returns v if already a power of 2).
+inline int next_pow2(int v) {
+    if (v <= 1)
+        return 1;
+    v--;
+    v |= v >> 1;
+    v |= v >> 2;
+    v |= v >> 4;
+    v |= v >> 8;
+    v |= v >> 16;
+    return v + 1;
+}
+
+/// Minimum tile size per dimension to keep tile volume >= ~1M elements.
+/// Returns a power of 2.
+inline int ct_min_tile(int ndims) {
     switch (ndims) {
     case 1:
-        return CT_TILE_1D;
+        return CT_MIN_TILE_1D;
     case 2:
-        return CT_TILE_2D;
+        return CT_MIN_TILE_2D;
     case 3:
-        return CT_TILE_3D;
+        return CT_MIN_TILE_3D;
     default:
-        CkAbort("Unsupported ndims=%d for ct_tile", ndims);
-        return 0;
+        return 1;
     }
 }
 
 /// Get the tile size for array `name` from array_meta.
-/// Falls back to ct_tile(ndims) if the array has no metadata entry or tile == 0.
-/// Use this in all executor communication paths instead of ct_tile() directly,
-/// so that per-array tile sizes assigned by compute_decompositions are respected.
+/// Falls back to ct_min_tile(ndims) if the array has no metadata entry or tile == 0.
+/// Use this in all executor communication paths so that per-array tile sizes
+/// assigned by compute_decompositions are respected.
 inline int array_tile(const std::unordered_map<int, ArrayDAGGroup::ArrayMetadata>& meta,
                       int name, int ndims) {
     auto it = meta.find(name);
     if (it != meta.end() && it->second.tile > 0)
         return it->second.tile;
-    return ct_tile(ndims);
+    return ct_min_tile(ndims);
 }
 
 /// Walk the AST to extract input and output regions for communication.

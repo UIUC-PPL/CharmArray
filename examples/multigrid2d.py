@@ -12,7 +12,7 @@ Usage:
 
 import argparse
 import charmnumeric as cnp
-from charmtyles.core import execute
+from charmtyles.core import execute, set_auto_flush
 import numpy as np
 
 
@@ -603,6 +603,7 @@ def main():
     # Connect to backend
     interface = cnp.CharmNumericInterface()
     interface.connect(args.host, args.port, args.odf)
+    set_auto_flush(interface, 1000)
 
     if args.mode in ("validate-restrict", "both"):
         validate_restriction(interface, n)
