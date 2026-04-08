@@ -1,0 +1,46 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Native/Cython build artifacts
+*.so
+*.pyd
+*.dylib
+*.dll
+charmnumeric/_native_region.cpp
+
+# Packaging outputs
+build/
+dist/
+.eggs/
+*.egg
+*.egg-info/
+pip-wheel-metadata/
+
+# Test and coverage outputs
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# Local CMake build directories
+src/build/
+tests/build/
+cmake-build-*/
+
+# Editor/system files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store

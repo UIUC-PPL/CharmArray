@@ -1,0 +1,85 @@
+mainmodule charmnumeric
+{
+    extern module charmtyles;
+
+    mainchare [migratable] Main
+    {
+        entry Main(CkArgMsg*);
+    };
+
+    group ArrayDAGGroup : DAGGroup
+    {
+        entry ArrayDAGGroup();
+        entry void set_proxies(CkArrayID p1, CkArrayID p2, CkArrayID p3);
+        entry [reductiontarget] void proxies_ready();
+        entry void receive_dag(int epoch, int size, char msg[size]);
+        entry void receive_get_request(int ndims, int epoch, int name, int size, int dtype);
+        entry void gather(int epoch, int name, int64_t offset, int64_t size, char data[size]);
+    };
+
+    array [1D] Partition1D
+    {
+        entry Partition1D(CProxy_ArrayDAGGroup dag_proxy);
+        entry void run();
+        entry void receive_data(int node_id, int input_index, int name,
+                                int ndims, int region_data[ndims*3],
+                                int64_t size,
+#ifdef USE_KOKKOS
+                                nocopydevice
+#endif
+                                char data[size]);
+#ifdef USE_KOKKOS
+        entry void receive_data(int node_id, int input_index, int name,
+                                int ndims, int region_data[ndims*3],
+                                int64_t size, char data[size],
+                                CkDeviceBufferPost* devicePost);
+        entry void send_complete(int send_id);
+#endif
+        entry void comm_done(int node_id);
+        entry void reduce_result(CkReductionMsg* msg);
+    };
+
+    array [2D] Partition2D
+    {
+        entry Partition2D(CProxy_ArrayDAGGroup dag_proxy);
+        entry void run();
+        entry void receive_data(int node_id, int input_index, int name,
+                                int ndims, int region_data[ndims*3],
+                                int64_t size,
+#ifdef USE_KOKKOS
+                                nocopydevice
+#endif
+                                char data[size]);
+#ifdef USE_KOKKOS
+        entry void receive_data(int node_id, int input_index, int name,
+                                int ndims, int region_data[ndims*3],
+                                int64_t size, char data[size],
+                                CkDeviceBufferPost* devicePost);
+        entry void send_complete(int send_id);
+#endif
+        entry void comm_done(int node_id);
+        entry void reduce_result(CkReductionMsg* msg);
+    };
+
+    array [3D] Partition3D
+    {
+        entry Partition3D(CProxy_ArrayDAGGroup dag_proxy);
+        entry void run();
+        entry void receive_data(int node_id, int input_index, int name,
+                                int ndims, int region_data[ndims*3],
+                                int64_t size,
+#ifdef USE_KOKKOS
+                                nocopydevice
+#endif
+                                char data[size]);
+#ifdef USE_KOKKOS
+        entry void receive_data(int node_id, int input_index, int name,
+                                int ndims, int region_data[ndims*3],
+                                int64_t size, char data[size],
+                                CkDeviceBufferPost* devicePost);
+        entry void send_complete(int send_id);
+#endif
+        entry void comm_done(int node_id);
+        entry void reduce_result(CkReductionMsg* msg);
+    };
+}

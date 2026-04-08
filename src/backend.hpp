@@ -1,0 +1,534 @@
+#pragma once
+
+#include "array_region.hpp"
+#include "opcodes.hpp"
+#include <charmtyles/core/charmtyles.hpp>
+#include <charmtyles/core/server.hpp>
+
+#include "charmnumeric.decl.h"
+
+// Fixed tile sizes for array decomposition.
+// All arrays (regardless of global size) use these tile dimensions.
+#define CT_TILE_1D 64
+#define CT_TILE_2D 64
+#define CT_TILE_3D 64
+
+// ---- Partition traits: map N -> concrete Charm++ chare/proxy/index types ----
+
+template <int N>
+struct PartitionTraits;
+
+template <>
+struct PartitionTraits<1> {
+    using ProxyType = CProxy_Partition1D;
+    using CkIndexType = CkIndex_Partition1D;
+};
+template <>
+struct PartitionTraits<2> {
+    using ProxyType = CProxy_Partition2D;
+    using CkIndexType = CkIndex_Partition2D;
+};
+template <>
+struct PartitionTraits<3> {
+    using ProxyType = CProxy_Partition3D;
+    using CkIndexType = CkIndex_Partition3D;
+};
+
+/// Access an element of an N-D chare array proxy by ChareIndex<N>.
+template <int N>
+inline auto proxy_at(typename PartitionTraits<N>::ProxyType& proxy, const ChareIndex<N>& ci);
+
+template <>
+inline auto proxy_at<1>(CProxy_Partition1D& proxy, const ChareIndex<1>& ci) {
+    return proxy[ci.idx[0]];
+}
+template <>
+inline auto proxy_at<2>(CProxy_Partition2D& proxy, const ChareIndex<2>& ci) {
+    return proxy(ci.idx[0], ci.idx[1]);
+}
+template <>
+inline auto proxy_at<3>(CProxy_Partition3D& proxy, const ChareIndex<3>& ci) {
+    return proxy(ci.idx[0], ci.idx[1], ci.idx[2]);
+}
+
+#ifdef USE_KOKKOS
+#include <Kokkos_Core.hpp>
+using DeviceSpace = Kokkos::DefaultExecutionSpace::memory_space;
+using HostSpace = Kokkos::HostSpace;
+#ifdef USE_NVIDIA
+#include "hapi.h"
+#include <cuda_runtime.h>
+#endif
+#endif
+
+class MLIRJitCompiler; // forward declaration — full definition only needed in backend.cpp
+
+/// Map C++ type to DType enum at compile time.
+template <typename T>
+constexpr DType dtype_of();
+template <>
+constexpr DType dtype_of<float>() {
+    return DType::FLOAT32;
+}
+template <>
+constexpr DType dtype_of<double>() {
+    return DType::FLOAT64;
+}
+template <>
+constexpr DType dtype_of<int32_t>() {
+    return DType::INT32;
+}
+template <>
+constexpr DType dtype_of<int64_t>() {
+    return DType::INT64;
+}
+
+/// Type-erased base class for N-D arrays.
+template <int N>
+class CTArrayBase {
+  public:
+    int name;
+    ArrayRegion<N> region;
+    ArrayDecomp<N> decomp;
+    std::array<int, N> global_shape;
+    int global_size; // total elements across all dimensions
+    bool owner;
+    DType dtype;
+
+    virtual ~CTArrayBase() = default;
+    int local_size() const { return region.size(); }
+    virtual void copyToHost() = 0;
+    virtual void copyToDevice() = 0;
+    virtual void* data_ptr() = 0;        // host pointer
+    virtual void* device_data_ptr() = 0; // device pointer (or host if no GPU)
+    virtual int elem_size() const = 0;
+};
+
+template <int N, typename T = float>
+class Array : public CTArrayBase<N> {
+  public:
+#ifdef USE_KOKKOS
+    Kokkos::View<T*, DeviceSpace> d_view;
+    typename Kokkos::View<T*, DeviceSpace>::HostMirror h_view;
+#else
+    T* data; // host pointer (always allocated, used for gather/get)
+#endif
+
+    /// Construct from a local region + global shape + decomposition.
+    Array(ArrayRegion<N> region_, std::array<int, N> global_shape_, int name_,
+          ArrayDecomp<N> decomp_) {
+        this->name = name_;
+        this->region = region_;
+        this->global_shape = global_shape_;
+        this->decomp = decomp_;
+        this->owner = true;
+        this->dtype = dtype_of<T>();
+        this->global_size = 1;
+        for (int d = 0; d < N; ++d)
+            this->global_size *= global_shape_[d];
+        int n = this->region.size();
+#ifdef USE_KOKKOS
+        d_view = Kokkos::View<T*, DeviceSpace>("array_device", n);
+        h_view = Kokkos::create_mirror_view(HostSpace{}, d_view);
+        Kokkos::deep_copy(d_view, T(0));
+        Kokkos::deep_copy(h_view, T(0));
+#else
+        data = new T[n];
+        for (int i = 0; i < n; i++)
+            data[i] = T(0);
+#endif
+    }
+
+    /// Non-owning constructor (wraps existing buffer).
+    Array(T* data_, int name_, int size_) {
+        this->name = name_;
+        this->owner = false;
+        this->dtype = dtype_of<T>();
+        this->global_size = size_;
+#ifdef USE_KOKKOS
+        h_view = Kokkos::View<T*, HostSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(data_, size_);
+        // No device allocation for non-owning arrays
+#else
+        data = data_;
+        for (int i = 0; i < size_; i++)
+            data[i] = T(0);
+#endif
+    }
+
+    ~Array() override {
+#ifndef USE_KOKKOS
+        if (data != NULL && this->owner)
+            delete[] data;
+#endif
+        // Kokkos Views are RAII — automatic cleanup
+    }
+
+    void* data_ptr() override {
+#ifdef USE_KOKKOS
+        return h_view.data();
+#else
+        return data;
+#endif
+    }
+
+    void* device_data_ptr() override {
+#ifdef USE_KOKKOS
+        return d_view.data();
+#else
+        return data; // CPU-only: host pointer is the "device" pointer
+#endif
+    }
+
+    int elem_size() const override { return sizeof(T); }
+
+    void copyToHost() override {
+#ifdef USE_KOKKOS
+        Kokkos::deep_copy(h_view, d_view);
+#endif
+    }
+
+    void copyToDevice() override {
+#ifdef USE_KOKKOS
+        Kokkos::deep_copy(d_view, h_view);
+#endif
+    }
+};
+
+// ---- Communication Structures (templated on dimensionality only) ----
+
+template <int N>
+struct RemoteBuffer {
+    char* data; // host pointer (CPU) or device pointer (USE_KOKKOS)
+    ArrayRegion<N> region;
+    int64_t byte_size;
+};
+
+template <int N>
+struct PendingComm {
+    DAGNode* node;
+    int expected_msgs;
+    std::vector<ArrayRegion<N>> my_inputs;
+    std::unordered_map<int, std::vector<RemoteBuffer<N>>> remote_buffers;
+    bool incremental = false; // When true, compute as panels arrive
+
+    void clear_remote_buffers() {
+        for (auto& [idx, bufs] : remote_buffers)
+            for (auto& rb : bufs) {
+#ifdef USE_KOKKOS
+                Kokkos::kokkos_free<DeviceSpace>(rb.data);
+#else
+                delete[] rb.data;
+#endif
+            }
+        remote_buffers.clear();
+    }
+};
+
+// ---- Forward declarations ----
+
+template <int N>
+class PartitionImpl;
+
+// ---- ArrayDAGGroup ----
+
+class ArrayDAGGroup : public CBase_ArrayDAGGroup {
+  public:
+    int num_compile;
+
+    // Per-ndims partition state: current chare grid and proxy.
+    struct PartitionGrid {
+        int grid[3] = {0, 0, 0};
+        int start_epoch = -1; // first epoch this partition was expanded
+    };
+    std::unordered_map<int, PartitionGrid> partition_grid;
+    CProxy_Partition1D partition_proxy_1;
+    CProxy_Partition2D partition_proxy_2;
+    CProxy_Partition3D partition_proxy_3;
+    std::unordered_map<int64_t, void*> compile_cache;
+    std::unordered_map<int64_t, void*> module_cache;
+    std::unordered_map<int, char*> gather_buffers;
+    std::unordered_map<int, int64_t> gather_counts; // bytes gathered so far
+    std::unordered_map<int, int64_t> gather_total;  // total bytes expected
+    struct GatherFragment {
+        int64_t offset;
+        int64_t size;
+        char* data; // owned copy (bytes)
+    };
+    std::unordered_map<int, std::vector<GatherFragment>> gather_early;
+
+    // Global metadata for arrays referenced by the current DAG.
+    // Maps array name -> metadata (ndims, global_shape, decomposition).
+    struct ArrayMetadata {
+        int ndims;
+        std::array<int, 3> global_shape; // padded to 3 dims
+        std::array<int, 3> offset;       // decomposition offset (padded to 3 dims)
+        int tile;                        // tile size
+        bool decomp_final = false;       // true once offset has been computed and must not change
+
+        /// Construct an ArrayDecomp<N> from the stored metadata.
+        template <int N>
+        ArrayDecomp<N> decomp() const {
+            std::array<int, N> shape{}, off{};
+            for (int d = 0; d < N; ++d) {
+                shape[d] = global_shape[d];
+                off[d] = offset[d];
+            }
+            return ArrayDecomp<N>::offset_decomp(shape, off, tile);
+        }
+    };
+    std::unordered_map<int, ArrayMetadata> array_meta;
+    // Physical decomposition of arrays that have already been materialized.
+    // This persists across epochs so later DAGs do not reinterpret old data
+    // using freshly recomputed metadata unless the array is recreated.
+    std::unordered_map<int, ArrayMetadata> live_array_meta;
+
+    MLIRJitCompiler* jit;
+
+    ArrayDAGGroup();
+    ArrayDAGGroup(CkMigrateMessage* m) {}
+    ~ArrayDAGGroup();
+
+    // Broadcast partition proxies from PE 0 to all PEs
+    void set_proxies(CkArrayID p1, CkArrayID p2, CkArrayID p3);
+    // Reduction target: all PEs have proxies, register CCS handlers
+    void proxies_ready();
+
+    // Unified DAG handling — dispatches to all relevant partition types
+    void receive_dag(int epoch, int size, char* serialized_dag);
+    void receive_get_request(int ndims, int epoch, int name, int size, int dtype = 0);
+    void gather(int epoch, int name, int64_t offset, int64_t size, char* data);
+
+    // Templated execute_node — dispatched by dtype at call site
+    template <int N, typename T = float>
+    void execute_node_nd(DAGNode* node, PartitionImpl<N>* partition, PendingComm<N>* comm = nullptr);
+
+    // Determine the decomposition for each array in the DAG.
+    // The runtime may later override entries with live_array_meta for arrays
+    // that already exist physically from an earlier epoch.
+    void compute_decompositions(DAG* dag);
+
+    // Shared
+    void* compile_node(DAGNode* node);
+    void compile(DAG* dag);
+};
+
+// ---- Unified Executor (templated on N only) ----
+
+template <int N>
+class ArrayDAGExecutorND : public DAGExecutor {
+  private:
+    PartitionImpl<N>* partition;
+
+  public:
+    std::unordered_map<int, PendingComm<N>> pending;
+
+    ArrayDAGExecutorND(ArrayDAGGroup* group_, PartitionImpl<N>* partition_)
+        : DAGExecutor(group_, N), partition(partition_) {}
+    virtual ~ArrayDAGExecutorND() = default;
+
+    void execute_dag_node(DAGNode* node) override;
+    void delete_array(int name) override;
+    void execute_matmul_node(DAGNode* node);
+    void execute_matmatmul_node(DAGNode* node);
+    void execute_reduce_node(DAGNode* node);
+    void execute_cross_set_region_node(DAGNode* node);
+    void execute_diag_node(DAGNode* node);
+    void execute_tile_node(DAGNode* node);
+    void on_comm_done(int node_id);
+    void on_matmatmul_receive(int node_id, int input_index);
+    void on_matmul_partial(int node_id, RemoteBuffer<N>& partial_buf);
+    void matmul_check_finalize(int node_id);
+    int ast_visitor(ASTNode* node, DType dtype);
+};
+
+// ---- PartitionImpl: all partition logic, independent of Charm++ chare base ----
+
+template <int N>
+class PartitionImpl {
+    friend class ArrayDAGExecutorND<N>;
+
+  public:
+    ArrayDAGExecutorND<N>* executor;
+    typename PartitionTraits<N>::ProxyType thisProxy;
+    CProxy_ArrayDAGGroup dag_proxy;
+    std::unordered_map<int, CTArrayBase<N>*> arrays; // mixed-type array storage
+    std::array<int, N> index;                        // N-D chare index (set by wrapper)
+
+#ifndef NDEBUG
+    int64_t comm_bytes_sent = 0; // cumulative communication volume (bytes) sent from this chare
+#endif
+
+    // Free list for array reuse: retired arrays keyed by (dtype, local_size).
+    // When a CREATE needs a buffer of the same dtype and local element count,
+    // it can pop one from here instead of allocating.
+    static constexpr int FREE_LIST_MAX = 4; // max entries per key
+    struct FreeKey {
+        DType dtype;
+        int local_size;
+        bool operator==(const FreeKey& o) const {
+            return dtype == o.dtype && local_size == o.local_size;
+        }
+    };
+    struct FreeKeyHash {
+        std::size_t operator()(const FreeKey& k) const {
+            return std::hash<int>()(static_cast<int>(k.dtype)) ^ (std::hash<int>()(k.local_size) << 16);
+        }
+    };
+    std::unordered_map<FreeKey, std::vector<CTArrayBase<N>*>, FreeKeyHash> free_arrays;
+
+    /// Move an array from `arrays` into the free list (or delete it if the
+    /// free list for its key is full).
+    void retire_array(int name) {
+        auto it = arrays.find(name);
+        if (it == arrays.end())
+            return;
+        CTArrayBase<N>* arr = it->second;
+        arrays.erase(it);
+        FreeKey key{arr->dtype, arr->local_size()};
+        auto& bucket = free_arrays[key];
+        if (static_cast<int>(bucket.size()) < FREE_LIST_MAX) {
+            bucket.push_back(arr);
+        } else {
+            delete arr;
+        }
+    }
+
+    /// Try to pop a reusable buffer from the free list.
+    /// Returns nullptr if none available.
+    CTArrayBase<N>* try_reuse(DType dtype, int local_size) {
+        FreeKey key{dtype, local_size};
+        auto it = free_arrays.find(key);
+        if (it == free_arrays.end() || it->second.empty())
+            return nullptr;
+        CTArrayBase<N>* arr = it->second.back();
+        it->second.pop_back();
+        if (it->second.empty())
+            free_arrays.erase(it);
+        return arr;
+    }
+#ifdef USE_KOKKOS
+    std::unordered_map<int, void*> pending_sends; // send_id → device ptr
+    int next_send_id = 0;
+#ifdef USE_NVIDIA
+    cudaStream_t compute_stream_raw;
+    cudaStream_t comm_stream_raw;
+    Kokkos::Cuda compute_exec;
+    Kokkos::Cuda comm_exec;
+#endif
+#endif
+
+    /// Return the N-D chare index (stored directly, no delinearization needed).
+    std::array<int, N> nd_index() const { return index; }
+
+    /// Callback to delegate contribute() to the owning chare.
+    std::function<void(int, void*, CkReduction::reducerType, CkCallback)> contribute_fn;
+    void contribute(int size, void* data, CkReduction::reducerType type, CkCallback cb) {
+        contribute_fn(size, data, type, cb);
+    }
+
+    void init(typename PartitionTraits<N>::ProxyType proxy, std::array<int, N> idx,
+              CProxy_ArrayDAGGroup dag_proxy_);
+    ~PartitionImpl();
+
+    int create(ArrayRegion<N>* region, int name, DType dtype, const ArrayDecomp<N>& decomp);
+    void run();
+    void receive_data(int node_id, int input_index, int name, int ndims, int* region_data,
+                      int64_t size, char* data);
+#ifdef USE_KOKKOS
+    void receive_data(int& node_id, int& input_index, int& name, int& ndims, int*& region_data,
+                      int64_t& size, char*& data, CkDeviceBufferPost* devicePost);
+    void send_complete(int send_id);
+#endif
+    void comm_done(int node_id);
+    void reduce_result(CkReductionMsg* msg);
+    void process_get(int epoch);
+};
+
+// ---- Thin wrapper chare classes ----
+
+class Partition1D : public CBase_Partition1D {
+  public:
+    PartitionImpl<1> impl;
+
+    Partition1D(CProxy_ArrayDAGGroup dag_proxy) {
+        impl.contribute_fn = [this](int sz, void* d, CkReduction::reducerType t, CkCallback cb) {
+            this->contribute(sz, d, t, cb);
+        };
+        impl.init(thisProxy, {thisIndex}, dag_proxy);
+    }
+    Partition1D(CkMigrateMessage* m) {}
+    ~Partition1D() {}
+
+    void run() { impl.run(); }
+    void receive_data(int node_id, int input_index, int name, int ndims, int* region_data,
+                      int64_t size, char* data) {
+        impl.receive_data(node_id, input_index, name, ndims, region_data, size, data);
+    }
+#ifdef USE_KOKKOS
+    void receive_data(int& node_id, int& input_index, int& name, int& ndims, int*& region_data,
+                      int64_t& size, char*& data, CkDeviceBufferPost* devicePost) {
+        impl.receive_data(node_id, input_index, name, ndims, region_data, size, data, devicePost);
+    }
+    void send_complete(int send_id) { impl.send_complete(send_id); }
+#endif
+    void comm_done(int node_id) { impl.comm_done(node_id); }
+    void reduce_result(CkReductionMsg* msg) { impl.reduce_result(msg); }
+};
+
+class Partition2D : public CBase_Partition2D {
+  public:
+    PartitionImpl<2> impl;
+
+    Partition2D(CProxy_ArrayDAGGroup dag_proxy) {
+        impl.contribute_fn = [this](int sz, void* d, CkReduction::reducerType t, CkCallback cb) {
+            this->contribute(sz, d, t, cb);
+        };
+        impl.init(thisProxy, {thisIndex.x, thisIndex.y}, dag_proxy);
+    }
+    Partition2D(CkMigrateMessage* m) {}
+    ~Partition2D() {}
+
+    void run() { impl.run(); }
+    void receive_data(int node_id, int input_index, int name, int ndims, int* region_data,
+                      int64_t size, char* data) {
+        impl.receive_data(node_id, input_index, name, ndims, region_data, size, data);
+    }
+#ifdef USE_KOKKOS
+    void receive_data(int& node_id, int& input_index, int& name, int& ndims, int*& region_data,
+                      int64_t& size, char*& data, CkDeviceBufferPost* devicePost) {
+        impl.receive_data(node_id, input_index, name, ndims, region_data, size, data, devicePost);
+    }
+    void send_complete(int send_id) { impl.send_complete(send_id); }
+#endif
+    void comm_done(int node_id) { impl.comm_done(node_id); }
+    void reduce_result(CkReductionMsg* msg) { impl.reduce_result(msg); }
+};
+
+class Partition3D : public CBase_Partition3D {
+  public:
+    PartitionImpl<3> impl;
+
+    Partition3D(CProxy_ArrayDAGGroup dag_proxy) {
+        impl.contribute_fn = [this](int sz, void* d, CkReduction::reducerType t, CkCallback cb) {
+            this->contribute(sz, d, t, cb);
+        };
+        impl.init(thisProxy, {thisIndex.x, thisIndex.y, thisIndex.z}, dag_proxy);
+    }
+    Partition3D(CkMigrateMessage* m) {}
+    ~Partition3D() {}
+
+    void run() { impl.run(); }
+    void receive_data(int node_id, int input_index, int name, int ndims, int* region_data,
+                      int64_t size, char* data) {
+        impl.receive_data(node_id, input_index, name, ndims, region_data, size, data);
+    }
+#ifdef USE_KOKKOS
+    void receive_data(int& node_id, int& input_index, int& name, int& ndims, int*& region_data,
+                      int64_t& size, char*& data, CkDeviceBufferPost* devicePost) {
+        impl.receive_data(node_id, input_index, name, ndims, region_data, size, data, devicePost);
+    }
+    void send_complete(int send_id) { impl.send_complete(send_id); }
+#endif
+    void comm_done(int node_id) { impl.comm_done(node_id); }
+    void reduce_result(CkReductionMsg* msg) { impl.reduce_result(msg); }
+};
