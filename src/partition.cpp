@@ -86,37 +86,7 @@ int PartitionImpl<N>::create(ArrayRegion<N>* region, int name, DType dtype,
         arrays.erase(old_it);
     }
 
-    // Try to reuse a retired buffer instead of allocating fresh memory.
-    int local_total = 1;
-    for (int d = 0; d < N; ++d)
-        local_total *= local_sizes[d];
-    CTArrayBase<N>* reused = try_reuse(dtype, local_total);
-    if (reused) {
-        reused->name = name;
-        reused->region = chare_region;
-        reused->global_shape = global_shape;
-        reused->decomp = decomp;
-        reused->global_size = 1;
-        for (int d = 0; d < N; ++d)
-            reused->global_size *= global_shape[d];
-        arrays[name] = reused;
-        return name;
-    }
-
-    switch (dtype) {
-    case DType::FLOAT32:
-        arrays[name] = new Array<N, float>(chare_region, global_shape, name, decomp);
-        break;
-    case DType::FLOAT64:
-        arrays[name] = new Array<N, double>(chare_region, global_shape, name, decomp);
-        break;
-    case DType::INT32:
-        arrays[name] = new Array<N, int32_t>(chare_region, global_shape, name, decomp);
-        break;
-    case DType::INT64:
-        arrays[name] = new Array<N, int64_t>(chare_region, global_shape, name, decomp);
-        break;
-    }
+    arrays[name] = allocate_or_reuse(chare_region, global_shape, name, dtype, decomp);
     return name;
 }
 
@@ -247,24 +217,8 @@ void PartitionImpl<N>::reduce_result(CkReductionMsg* msg) {
             std::array<int, 1> out_step = {1};
             std::array<int, 1> out_gs = {1};
             ArrayRegion<1> out_region(out_start, out_stop, out_step);
-            switch (dt) {
-            case DType::FLOAT32:
-                arrays[result_name] =
-                    new Array<1, float>(out_region, out_gs, result_name, out_decomp);
-                break;
-            case DType::FLOAT64:
-                arrays[result_name] =
-                    new Array<1, double>(out_region, out_gs, result_name, out_decomp);
-                break;
-            case DType::INT32:
-                arrays[result_name] =
-                    new Array<1, int32_t>(out_region, out_gs, result_name, out_decomp);
-                break;
-            case DType::INT64:
-                arrays[result_name] =
-                    new Array<1, int64_t>(out_region, out_gs, result_name, out_decomp);
-                break;
-            }
+            arrays[result_name] =
+                allocate_or_reuse(out_region, out_gs, result_name, dt, out_decomp);
         }
 
         // Store the reduced value

@@ -267,8 +267,11 @@ static void dispatch_execute(DType dt, ArrayDAGGroup* group, DAGNode* node, Part
 
 template <int N>
 void ArrayDAGExecutorND<N>::delete_array(int name) {
-    partition->retire_array(name);
     auto* dag_group = static_cast<ArrayDAGGroup*>(group);
+    const int had_live_meta = dag_group->live_array_meta.count(name) ? 1 : 0;
+    DBG_PRINT("[PE %d] Partition<%d> delete_array epoch=%d name=%d live_meta=%d\n",
+              CkMyPe(), N, epoch, name, had_live_meta);
+    partition->retire_array(name);
     dag_group->live_array_meta.erase(name);
 }
 
@@ -1932,20 +1935,8 @@ void ArrayDAGExecutorND<N>::execute_matmatmul_node(DAGNode* node) {
                 std::array<int, 2> out_gs = {M, N_cols};
                 ArrayRegion<2> out_region(out_start, out_stop, out_step);
                 ArrayDecomp<2> out_decomp = dag_group->array_meta[result_name].template decomp<2>();
-                switch (dt) {
-                case DType::FLOAT32:
-                    partition->arrays[result_name] = new Array<2, float>(out_region, out_gs, result_name, out_decomp);
-                    break;
-                case DType::FLOAT64:
-                    partition->arrays[result_name] = new Array<2, double>(out_region, out_gs, result_name, out_decomp);
-                    break;
-                case DType::INT32:
-                    partition->arrays[result_name] = new Array<2, int32_t>(out_region, out_gs, result_name, out_decomp);
-                    break;
-                case DType::INT64:
-                    partition->arrays[result_name] = new Array<2, int64_t>(out_region, out_gs, result_name, out_decomp);
-                    break;
-                }
+                partition->arrays[result_name] =
+                    partition->allocate_or_reuse(out_region, out_gs, result_name, dt, out_decomp);
             }
 
             // Count A panels: how many A column chares cover the K dimension
@@ -2897,20 +2888,8 @@ void ArrayDAGExecutorND<N>::execute_diag_node(DAGNode* node) {
                 std::array<int, 2> out_gs = {out_n, out_n};
                 ArrayRegion<2> out_region(out_start, out_stop, out_step);
                 ArrayDecomp<2> out_decomp = dag_group->array_meta[result_name].template decomp<2>();
-                switch (dt) {
-                case DType::FLOAT32:
-                    partition->arrays[result_name] = new Array<2, float>(out_region, out_gs, result_name, out_decomp);
-                    break;
-                case DType::FLOAT64:
-                    partition->arrays[result_name] = new Array<2, double>(out_region, out_gs, result_name, out_decomp);
-                    break;
-                case DType::INT32:
-                    partition->arrays[result_name] = new Array<2, int32_t>(out_region, out_gs, result_name, out_decomp);
-                    break;
-                case DType::INT64:
-                    partition->arrays[result_name] = new Array<2, int64_t>(out_region, out_gs, result_name, out_decomp);
-                    break;
-                }
+                partition->arrays[result_name] =
+                    partition->allocate_or_reuse(out_region, out_gs, result_name, dt, out_decomp);
 #ifndef USE_KOKKOS
                 // Array constructor already zero-initializes device memory under USE_KOKKOS
                 std::memset(partition->arrays[result_name]->data_ptr(), 0,
@@ -3894,24 +3873,8 @@ int ArrayDAGExecutorND<N>::ast_visitor(ASTNode* node, DType dtype) {
                 ArrayRegion<N> out_region(out_start, out_stop, out_step);
                 ArrayDecomp<N> out_decomp = static_cast<ArrayDAGGroup*>(group)->array_meta[result_name].template decomp<N>();
                 // Use dtype dispatch to create the correctly typed result array
-                switch (dtype) {
-                case DType::FLOAT32:
-                    partition->arrays[result_name] =
-                        new Array<N, float>(out_region, out_gs, result_name, out_decomp);
-                    break;
-                case DType::FLOAT64:
-                    partition->arrays[result_name] =
-                        new Array<N, double>(out_region, out_gs, result_name, out_decomp);
-                    break;
-                case DType::INT32:
-                    partition->arrays[result_name] =
-                        new Array<N, int32_t>(out_region, out_gs, result_name, out_decomp);
-                    break;
-                case DType::INT64:
-                    partition->arrays[result_name] =
-                        new Array<N, int64_t>(out_region, out_gs, result_name, out_decomp);
-                    break;
-                }
+                partition->arrays[result_name] = partition->allocate_or_reuse(
+                    out_region, out_gs, result_name, dtype, out_decomp);
             }
 
             CTArrayBase<N>* result_base = partition->arrays[result_name];
@@ -4057,24 +4020,8 @@ int ArrayDAGExecutorND<N>::ast_visitor(ASTNode* node, DType dtype) {
                 std::array<int, 2> out_gs = {c_M, c_N};
                 ArrayRegion<2> out_region(out_start, out_stop, out_step);
                 ArrayDecomp<2> out_decomp = dag_group2->array_meta[result_name].template decomp<2>();
-                switch (dtype) {
-                case DType::FLOAT32:
-                    partition->arrays[result_name] =
-                        new Array<2, float>(out_region, out_gs, result_name, out_decomp);
-                    break;
-                case DType::FLOAT64:
-                    partition->arrays[result_name] =
-                        new Array<2, double>(out_region, out_gs, result_name, out_decomp);
-                    break;
-                case DType::INT32:
-                    partition->arrays[result_name] =
-                        new Array<2, int32_t>(out_region, out_gs, result_name, out_decomp);
-                    break;
-                case DType::INT64:
-                    partition->arrays[result_name] =
-                        new Array<2, int64_t>(out_region, out_gs, result_name, out_decomp);
-                    break;
-                }
+                partition->arrays[result_name] = partition->allocate_or_reuse(
+                    out_region, out_gs, result_name, dtype, out_decomp);
             }
 
 #ifdef USE_KOKKOS

@@ -364,45 +364,100 @@ class PartitionImpl {
     int64_t comm_bytes_sent = 0; // cumulative communication volume (bytes) sent from this chare
 #endif
 
-    // Free list for array reuse: retired arrays keyed by (dtype, local_size).
-    // When a CREATE needs a buffer of the same dtype and local element count,
-    // it can pop one from here instead of allocating.
+    // Free list for array reuse: retired arrays keyed by exact buffer metadata.
+    // A buffer is only reusable when dtype, shape, and decomposition match.
     static constexpr int FREE_LIST_MAX = 4; // max entries per key
     struct FreeKey {
         DType dtype;
-        int local_size;
+        std::array<int, N> local_shape;
+        std::array<int, N> global_shape;
+        std::array<int, N> decomp_offset;
+        std::array<int, N> decomp_global_shape;
+        int decomp_tile;
+
         bool operator==(const FreeKey& o) const {
-            return dtype == o.dtype && local_size == o.local_size;
+            return dtype == o.dtype &&
+                   local_shape == o.local_shape &&
+                   global_shape == o.global_shape &&
+                   decomp_offset == o.decomp_offset &&
+                   decomp_global_shape == o.decomp_global_shape &&
+                   decomp_tile == o.decomp_tile;
         }
     };
     struct FreeKeyHash {
+        static inline void hash_combine(std::size_t& seed, std::size_t value) {
+            seed ^= value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        }
+
+        static inline void hash_int_array(std::size_t& seed, const std::array<int, N>& values) {
+            for (int value : values)
+                hash_combine(seed, std::hash<int>()(value));
+        }
+
         std::size_t operator()(const FreeKey& k) const {
-            return std::hash<int>()(static_cast<int>(k.dtype)) ^ (std::hash<int>()(k.local_size) << 16);
+            std::size_t seed = std::hash<int>()(static_cast<int>(k.dtype));
+            hash_int_array(seed, k.local_shape);
+            hash_int_array(seed, k.global_shape);
+            hash_int_array(seed, k.decomp_offset);
+            hash_int_array(seed, k.decomp_global_shape);
+            hash_combine(seed, std::hash<int>()(k.decomp_tile));
+            return seed;
         }
     };
     std::unordered_map<FreeKey, std::vector<CTArrayBase<N>*>, FreeKeyHash> free_arrays;
+
+    static FreeKey make_free_key(DType dtype,
+                                 const ArrayRegion<N>& region,
+                                 const std::array<int, N>& global_shape,
+                                 const ArrayDecomp<N>& decomp) {
+        std::array<int, N> local_shape{};
+        for (int d = 0; d < N; ++d)
+            local_shape[d] = region.size(d);
+        return FreeKey{
+            dtype,
+            local_shape,
+            global_shape,
+            decomp.offset,
+            decomp.global_shape,
+            decomp.tile,
+        };
+    }
 
     /// Move an array from `arrays` into the free list (or delete it if the
     /// free list for its key is full).
     void retire_array(int name) {
         auto it = arrays.find(name);
-        if (it == arrays.end())
+        if (it == arrays.end()) {
+            DBG_PRINT("[PE %d] Partition<%d> retire_array name=%d: no local buffer\n",
+                      CkMyPe(), N, name);
             return;
+        }
         CTArrayBase<N>* arr = it->second;
         arrays.erase(it);
-        FreeKey key{arr->dtype, arr->local_size()};
+        FreeKey key = make_free_key(arr->dtype, arr->region, arr->global_shape, arr->decomp);
         auto& bucket = free_arrays[key];
         if (static_cast<int>(bucket.size()) < FREE_LIST_MAX) {
             bucket.push_back(arr);
+            DBG_PRINT("[PE %d] Partition<%d> retire_array name=%d: moved to freelist "
+                      "(dtype=%d local_size=%d bucket=%d/%d)\n",
+                      CkMyPe(), N, name, static_cast<int>(arr->dtype), arr->local_size(),
+                      static_cast<int>(bucket.size()), FREE_LIST_MAX);
         } else {
+            DBG_PRINT("[PE %d] Partition<%d> retire_array name=%d: deleting local buffer "
+                      "(dtype=%d local_size=%d freelist_full=%d)\n",
+                      CkMyPe(), N, name, static_cast<int>(arr->dtype), arr->local_size(),
+                      FREE_LIST_MAX);
             delete arr;
         }
     }
 
     /// Try to pop a reusable buffer from the free list.
     /// Returns nullptr if none available.
-    CTArrayBase<N>* try_reuse(DType dtype, int local_size) {
-        FreeKey key{dtype, local_size};
+    CTArrayBase<N>* try_reuse(DType dtype,
+                              const ArrayRegion<N>& region,
+                              const std::array<int, N>& global_shape,
+                              const ArrayDecomp<N>& decomp) {
+        FreeKey key = make_free_key(dtype, region, global_shape, decomp);
         auto it = free_arrays.find(key);
         if (it == free_arrays.end() || it->second.empty())
             return nullptr;
@@ -411,6 +466,83 @@ class PartitionImpl {
         if (it->second.empty())
             free_arrays.erase(it);
         return arr;
+    }
+
+    template <typename T>
+    Array<N, T>* allocate_or_reuse_typed(const ArrayRegion<N>& region,
+                                         const std::array<int, N>& global_shape,
+                                         int name,
+                                         const ArrayDecomp<N>& decomp) {
+        CTArrayBase<N>* reused = try_reuse(dtype_of<T>(), region, global_shape, decomp);
+        if (reused == nullptr)
+            return new Array<N, T>(region, global_shape, name, decomp);
+
+        auto* arr = static_cast<Array<N, T>*>(reused);
+        arr->name = name;
+        arr->region = region;
+        arr->decomp = decomp;
+        arr->global_shape = global_shape;
+        arr->global_size = 1;
+        for (int d = 0; d < N; ++d)
+            arr->global_size *= global_shape[d];
+        arr->owner = true;
+        arr->dtype = dtype_of<T>();
+
+#ifdef USE_KOKKOS
+        Kokkos::deep_copy(arr->d_view, T(0));
+        Kokkos::deep_copy(arr->h_view, T(0));
+#else
+        T* data = static_cast<T*>(arr->data_ptr());
+        for (int i = 0; i < arr->local_size(); ++i)
+            data[i] = T(0);
+#endif
+        return arr;
+    }
+
+    CTArrayBase<N>* allocate_or_reuse(const ArrayRegion<N>& region,
+                                      const std::array<int, N>& global_shape,
+                                      int name,
+                                      DType dtype,
+                                      const ArrayDecomp<N>& decomp) {
+        switch (dtype) {
+        case DType::FLOAT32:
+            return allocate_or_reuse_typed<float>(region, global_shape, name, decomp);
+        case DType::FLOAT64:
+            return allocate_or_reuse_typed<double>(region, global_shape, name, decomp);
+        case DType::INT32:
+            return allocate_or_reuse_typed<int32_t>(region, global_shape, name, decomp);
+        case DType::INT64:
+            return allocate_or_reuse_typed<int64_t>(region, global_shape, name, decomp);
+        }
+        return nullptr;
+    }
+
+    template <typename T>
+    Array<N, T>* ensure_array_typed(const ArrayRegion<N>& region,
+                                    const std::array<int, N>& global_shape,
+                                    int name,
+                                    const ArrayDecomp<N>& decomp) {
+        auto it = arrays.find(name);
+        if (it == arrays.end()) {
+            auto* arr = allocate_or_reuse_typed<T>(region, global_shape, name, decomp);
+            arrays[name] = arr;
+            return arr;
+        }
+        return static_cast<Array<N, T>*>(it->second);
+    }
+
+    CTArrayBase<N>* ensure_array(const ArrayRegion<N>& region,
+                                 const std::array<int, N>& global_shape,
+                                 int name,
+                                 DType dtype,
+                                 const ArrayDecomp<N>& decomp) {
+        auto it = arrays.find(name);
+        if (it == arrays.end()) {
+            auto* arr = allocate_or_reuse(region, global_shape, name, dtype, decomp);
+            arrays[name] = arr;
+            return arr;
+        }
+        return it->second;
     }
 #ifdef USE_KOKKOS
     std::unordered_map<int, void*> pending_sends; // send_id → device ptr

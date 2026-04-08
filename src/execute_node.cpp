@@ -327,17 +327,13 @@ void ArrayDAGGroup::execute_node_nd(DAGNode* node, PartitionImpl<N>* partition, 
                         }
 
                         int slice_rows = mat_re - mat_rs;
-                        if (partition->arrays.find(result_name) == partition->arrays.end()) {
-                            std::array<int, N> out_start = {}, out_stop, out_step, out_gs;
-                            out_stop[0] = sub_rows; out_step[0] = 1; out_gs[0] = slice_rows;
-                            out_stop[1] = 1; out_step[1] = 1; out_gs[1] = 1;
-                            ArrayRegion<N> out_region(out_start, out_stop, out_step);
-                            ArrayDecomp<N> out_decomp = array_meta[result_name].decomp<N>();
-                            partition->arrays[result_name] =
-                                new Array<N, T>(out_region, out_gs, result_name, out_decomp);
-                        }
-                        Array<N, T>* result =
-                            static_cast<Array<N, T>*>(partition->arrays[result_name]);
+                        std::array<int, N> out_start = {}, out_stop, out_step, out_gs;
+                        out_stop[0] = sub_rows; out_step[0] = 1; out_gs[0] = slice_rows;
+                        out_stop[1] = 1; out_step[1] = 1; out_gs[1] = 1;
+                        ArrayRegion<N> out_region(out_start, out_stop, out_step);
+                        ArrayDecomp<N> out_decomp = array_meta[result_name].decomp<N>();
+                        Array<N, T>* result = partition->template ensure_array_typed<T>(
+                            out_region, out_gs, result_name, out_decomp);
 
                         int actual_cols = std::min(sub_cols, vec_len);
 #ifdef USE_KOKKOS
@@ -403,11 +399,7 @@ void ArrayDAGGroup::execute_node_nd(DAGNode* node, PartitionImpl<N>* partition, 
                                     dag_group->partition_proxy_1);
                             }
 
-                            auto res_it = partition->arrays.find(result_name);
-                            if (res_it != partition->arrays.end()) {
-                                delete res_it->second;
-                                partition->arrays.erase(res_it);
-                            }
+                            partition->retire_array(result_name);
                         }
 
                         handled = true;
@@ -509,18 +501,14 @@ void ArrayDAGGroup::execute_node_nd(DAGNode* node, PartitionImpl<N>* partition, 
                         int slice_rows = rd_e - rd_s;
 
                         // Create temporary result array for sub_rows
-                        if (partition->arrays.find(result_name) == partition->arrays.end()) {
-                            std::array<int, N> out_start = {}, out_stop = {}, out_step = {}, out_gs = {};
-                            out_stop[0] = sub_rows; out_step[0] = 1; out_gs[0] = slice_rows;
-                            out_stop[1] = 1; out_step[1] = 1; out_gs[1] = 1;
-                            out_stop[2] = 1; out_step[2] = 1; out_gs[2] = 1;
-                            ArrayRegion<N> out_region(out_start, out_stop, out_step);
-                            ArrayDecomp<N> out_decomp = array_meta[result_name].decomp<N>();
-                            partition->arrays[result_name] =
-                                new Array<N, T>(out_region, out_gs, result_name, out_decomp);
-                        }
-                        Array<N, T>* result =
-                            static_cast<Array<N, T>*>(partition->arrays[result_name]);
+                        std::array<int, N> out_start = {}, out_stop = {}, out_step = {}, out_gs = {};
+                        out_stop[0] = sub_rows; out_step[0] = 1; out_gs[0] = slice_rows;
+                        out_stop[1] = 1; out_step[1] = 1; out_gs[1] = 1;
+                        out_stop[2] = 1; out_step[2] = 1; out_gs[2] = 1;
+                        ArrayRegion<N> out_region(out_start, out_stop, out_step);
+                        ArrayDecomp<N> out_decomp = array_meta[result_name].decomp<N>();
+                        Array<N, T>* result = partition->template ensure_array_typed<T>(
+                            out_region, out_gs, result_name, out_decomp);
 
                         int actual_cols = std::min(sub_cols, vec_len);
 
@@ -626,11 +614,7 @@ void ArrayDAGGroup::execute_node_nd(DAGNode* node, PartitionImpl<N>* partition, 
                                     dag_group->partition_proxy_1);
                             }
 
-                            auto res_it = partition->arrays.find(result_name);
-                            if (res_it != partition->arrays.end()) {
-                                delete res_it->second;
-                                partition->arrays.erase(res_it);
-                            }
+                            partition->retire_array(result_name);
                         }
 
                         handled = true;
@@ -687,16 +671,14 @@ void ArrayDAGGroup::execute_node_nd(DAGNode* node, PartitionImpl<N>* partition, 
                         }
 
                         // Create result array
-                        if (partition->arrays.find(result_name) == partition->arrays.end()) {
-                            std::array<int, 1> out_start = {0};
-                            std::array<int, 1> out_stop = {local_result_size};
-                            std::array<int, 1> out_step = {1};
-                            std::array<int, 1> out_gs = {slice_rows};
-                            ArrayRegion<1> out_region(out_start, out_stop, out_step);
-                            ArrayDecomp<1> out_decomp = array_meta[result_name].decomp<1>();
-                            partition->arrays[result_name] =
-                                new Array<1, T>(out_region, out_gs, result_name, out_decomp);
-                        }
+                        std::array<int, 1> out_start = {0};
+                        std::array<int, 1> out_stop = {local_result_size};
+                        std::array<int, 1> out_step = {1};
+                        std::array<int, 1> out_gs = {slice_rows};
+                        ArrayRegion<1> out_region(out_start, out_stop, out_step);
+                        ArrayDecomp<1> out_decomp = array_meta[result_name].decomp<1>();
+                        partition->template ensure_array_typed<T>(
+                            out_region, out_gs, result_name, out_decomp);
 
                         auto rb_it = comm->remote_buffers.find(0);
                         if (rb_it != comm->remote_buffers.end() && !rb_it->second.empty()) {
@@ -768,15 +750,13 @@ void ArrayDAGGroup::execute_node_nd(DAGNode* node, PartitionImpl<N>* partition, 
                         int local_cols = result_chare.stop[1] - result_chare.start[1];
 
                         // Create zero-initialized output array
-                        if (partition->arrays.find(result_name) == partition->arrays.end()) {
-                            std::array<int, 2> out_start = {0, 0};
-                            std::array<int, 2> out_stop = {local_rows, local_cols};
-                            std::array<int, 2> out_step = {1, 1};
-                            std::array<int, 2> out_gs = {out_n, out_n};
-                            ArrayRegion<2> out_region(out_start, out_stop, out_step);
-                            partition->arrays[result_name] =
-                                new Array<2, T>(out_region, out_gs, result_name, result_decomp);
-                        }
+                        std::array<int, 2> out_start = {0, 0};
+                        std::array<int, 2> out_stop = {local_rows, local_cols};
+                        std::array<int, 2> out_step = {1, 1};
+                        std::array<int, 2> out_gs = {out_n, out_n};
+                        ArrayRegion<2> out_region(out_start, out_stop, out_step);
+                        partition->template ensure_array_typed<T>(
+                            out_region, out_gs, result_name, result_decomp);
                         int row_start = result_chare.start[0];
                         int col_start = result_chare.start[1];
 
@@ -849,15 +829,13 @@ void ArrayDAGGroup::execute_node_nd(DAGNode* node, PartitionImpl<N>* partition, 
                         int my_start = result_chare_1d.start[0];
                         int local_size = result_chare_1d.stop[0] - my_start;
 
-                        if (partition->arrays.find(result_name) == partition->arrays.end()) {
-                            std::array<int, 1> out_start = {0};
-                            std::array<int, 1> out_stop = {local_size};
-                            std::array<int, 1> out_step = {1};
-                            std::array<int, 1> out_gs = {diag_len};
-                            ArrayRegion<1> out_region(out_start, out_stop, out_step);
-                            partition->arrays[result_name] =
-                                new Array<1, T>(out_region, out_gs, result_name, result_decomp_1d);
-                        }
+                        std::array<int, 1> out_start = {0};
+                        std::array<int, 1> out_stop = {local_size};
+                        std::array<int, 1> out_step = {1};
+                        std::array<int, 1> out_gs = {diag_len};
+                        ArrayRegion<1> out_region(out_start, out_stop, out_step);
+                        partition->template ensure_array_typed<T>(
+                            out_region, out_gs, result_name, result_decomp_1d);
                         // Array is already zero-initialized by constructor
 #ifdef USE_KOKKOS
                         // Device-side placement: rb.data is a device pointer
@@ -942,17 +920,15 @@ void ArrayDAGGroup::execute_node_nd(DAGNode* node, PartitionImpl<N>* partition, 
                         }
 
                         // Create output array if not yet allocated
-                        if (partition->arrays.find(result_name) == partition->arrays.end()) {
-                            std::array<int, N> out_start, out_stop, out_step;
-                            for (int d = 0; d < N; ++d) {
-                                out_start[d] = 0;
-                                out_stop[d] = local_sizes[d];
-                                out_step[d] = 1;
-                            }
-                            ArrayRegion<N> out_region(out_start, out_stop, out_step);
-                            partition->arrays[result_name] =
-                                new Array<N, T>(out_region, out_gs, result_name, result_decomp);
+                        std::array<int, N> out_start, out_stop, out_step;
+                        for (int d = 0; d < N; ++d) {
+                            out_start[d] = 0;
+                            out_stop[d] = local_sizes[d];
+                            out_step[d] = 1;
                         }
+                        ArrayRegion<N> out_region(out_start, out_stop, out_step);
+                        partition->template ensure_array_typed<T>(
+                            out_region, out_gs, result_name, result_decomp);
 
                         // Get input shape (padded to out_ndims)
                         std::array<int, 3> input_shape = input_meta_it->second.global_shape;
@@ -1461,28 +1437,26 @@ void ArrayDAGGroup::execute_node_nd(DAGNode* node, PartitionImpl<N>* partition, 
             int result_name = outputRoots[i]->result_name;
             DBG_PRINT("[Chare %d]   output[%d] result_name=%d is_temp=%d (node_id=%d)\n",
                       chare_idx, i, result_name, (int)outputRoots[i]->is_temp, node->id);
-            if (partition->arrays.find(result_name) == partition->arrays.end()) {
-                std::array<int, N> out_start = {};
-                std::array<int, N> out_stop, out_step;
-                for (int d = 0; d < N; ++d) {
-                    out_stop[d] = (int)out_sizes[d];
-                    out_step[d] = 1;
-                }
-                ArrayRegion<N> out_region(out_start, out_stop, out_step);
-                ArrayDecomp<N> out_decomp_alloc;
-                {
-                    int lookup_name = result_name;
-                    if (static_cast<Opcode>(outputRoots[i]->opcode) == Opcode::SET_REGION &&
-                        !outputRoots[i]->operands.empty())
-                        lookup_name = outputRoots[i]->operands[0]->result_name;
-                    auto meta_it = array_meta.find(lookup_name);
-                    if (meta_it != array_meta.end())
-                        out_decomp_alloc = meta_it->second.template decomp<N>();
-                }
-                partition->arrays[result_name] = new Array<N, T>(out_region, out_gs, result_name, out_decomp_alloc);
+            std::array<int, N> out_start = {};
+            std::array<int, N> out_stop, out_step;
+            for (int d = 0; d < N; ++d) {
+                out_stop[d] = (int)out_sizes[d];
+                out_step[d] = 1;
             }
-            descs[n_inputs + i] =
-                make_output_memref(static_cast<Array<N, T>*>(partition->arrays[result_name]));
+            ArrayRegion<N> out_region(out_start, out_stop, out_step);
+            ArrayDecomp<N> out_decomp_alloc;
+            {
+                int lookup_name = result_name;
+                if (static_cast<Opcode>(outputRoots[i]->opcode) == Opcode::SET_REGION &&
+                    !outputRoots[i]->operands.empty())
+                    lookup_name = outputRoots[i]->operands[0]->result_name;
+                auto meta_it = array_meta.find(lookup_name);
+                if (meta_it != array_meta.end())
+                    out_decomp_alloc = meta_it->second.template decomp<N>();
+            }
+            Array<N, T>* output = partition->template ensure_array_typed<T>(
+                out_region, out_gs, result_name, out_decomp_alloc);
+            descs[n_inputs + i] = make_output_memref(output);
         }
 
         dispatch_kernel(func_ptr, n_memrefs, descs, n_inputs, broadcast_ptrs
@@ -1623,7 +1597,8 @@ void ArrayDAGGroup::execute_node_nd(DAGNode* node, PartitionImpl<N>* partition, 
                     else
                         result_decomp = out_decomp;
                 }
-                partition->arrays[result_name] = new Array<N, T>(out_region, out_gs, result_name, result_decomp);
+                partition->template ensure_array_typed<T>(
+                    out_region, out_gs, result_name, result_decomp);
             }
         }
 
