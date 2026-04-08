@@ -23,6 +23,20 @@ def test_elementwise_expression_roundtrip(interface):
     np.testing.assert_allclose(got, want)
 
 
+@pytest.mark.parametrize("shape", [(8,), (4, 4), (4, 4, 4)])
+def test_elementwise_add_roundtrip_all_ranks(interface, shape):
+    lhs = create_array(shape, dtype=np.float32)
+    rhs = create_array(shape, dtype=np.float32)
+
+    lhs[...] = 1.0
+    rhs[...] = 1.0
+
+    got = (lhs + rhs).get(interface)
+    want = np.full(shape, 2.0, dtype=np.float32)
+
+    np.testing.assert_allclose(got, want)
+
+
 def test_strided_slice_assignment_roundtrip(interface):
     n = 17
     coarse_n = (n - 1) // 2 + 1
@@ -39,6 +53,46 @@ def test_strided_slice_assignment_roundtrip(interface):
     want[1:-1, 1:-1] = np.ones((n, n), dtype=np.float64)[2:-2:2, 2:-2:2]
 
     np.testing.assert_array_equal(got, want)
+
+
+def test_jacobi3d_single_step_matches_numpy(interface):
+    u = create_array((4, 4, 4), dtype=np.float32)
+
+    u[0, :, :] = 1.0
+    u[-1, :, :] = 1.0
+    u[:, 0, :] = 1.0
+    u[:, -1, :] = 1.0
+    u[:, :, 0] = 1.0
+    u[:, :, -1] = 1.0
+
+    u[1:-1, 1:-1, 1:-1] = (1.0 / 6.0) * (
+        u[:-2, 1:-1, 1:-1]
+        + u[2:, 1:-1, 1:-1]
+        + u[1:-1, :-2, 1:-1]
+        + u[1:-1, 2:, 1:-1]
+        + u[1:-1, 1:-1, :-2]
+        + u[1:-1, 1:-1, 2:]
+    )
+
+    got = u.get(interface)
+
+    want = np.zeros((4, 4, 4), dtype=np.float32)
+    want[0, :, :] = 1.0
+    want[-1, :, :] = 1.0
+    want[:, 0, :] = 1.0
+    want[:, -1, :] = 1.0
+    want[:, :, 0] = 1.0
+    want[:, :, -1] = 1.0
+    want[1:-1, 1:-1, 1:-1] = (1.0 / 6.0) * (
+        want[:-2, 1:-1, 1:-1]
+        + want[2:, 1:-1, 1:-1]
+        + want[1:-1, :-2, 1:-1]
+        + want[1:-1, 2:, 1:-1]
+        + want[1:-1, 1:-1, :-2]
+        + want[1:-1, 1:-1, 2:]
+    )
+
+    np.testing.assert_allclose(got, want)
 
 
 @pytest.mark.parametrize("k", [0, 1, -1])

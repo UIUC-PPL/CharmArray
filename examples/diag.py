@@ -7,13 +7,11 @@ Tests both modes:
 Also tests the k offset parameter for super/sub-diagonals.
 """
 
-from charmnumeric.charmnumeric import create_array
-from charmnumeric.operations import diag
+import charmnumeric as cnp
 from charmtyles.core import execute
-from charmtyles.interface import CCSInterface
 import numpy as np
 
-interface = CCSInterface()
+interface = cnp.CharmNumericInterface()
 interface.connect('192.168.1.114', 1234, 4)
 
 N = 128
@@ -21,11 +19,10 @@ N = 128
 # ------------------------------------------------------------------
 # Test 1: 1D → 2D — diag(v) constructs diagonal matrix (k=0)
 # ------------------------------------------------------------------
-v = create_array((N,), dtype=np.float64)
-v = v + 1  # all ones
+v = cnp.ones((N,), dtype=cnp.float64)
 execute(interface)
 
-D = diag(v)
+D = cnp.diag(v)
 execute(interface)
 result1 = D.get(interface)
 v_np = np.ones(N, dtype=np.float64)
@@ -38,11 +35,10 @@ if not np.allclose(result1, expected1):
 # ------------------------------------------------------------------
 # Test 2: 2D → 1D — diag(A) extracts main diagonal (k=0)
 # ------------------------------------------------------------------
-A = create_array((N, N), dtype=np.float64)
-A = A + 1  # all ones
+A = cnp.ones((N, N), dtype=cnp.float64)
 execute(interface)
 
-d = diag(A)
+d = cnp.diag(A)
 execute(interface)
 result2 = d.get(interface)
 A_np = np.ones((N, N), dtype=np.float64)
@@ -55,11 +51,10 @@ if not np.allclose(result2, expected2):
 # ------------------------------------------------------------------
 # Test 3: 1D → 2D with k=1 (super-diagonal)
 # ------------------------------------------------------------------
-v2 = create_array((N,), dtype=np.float64)
-v2 = v2 + 2
+v2 = cnp.full((N,), 2.0, dtype=cnp.float64)
 execute(interface)
 
-D3 = diag(v2, k=1)
+D3 = cnp.diag(v2, k=1)
 execute(interface)
 result3 = D3.get(interface)
 v2_np = np.full(N, 2.0, dtype=np.float64)
@@ -72,7 +67,7 @@ if not np.allclose(result3, expected3):
 # ------------------------------------------------------------------
 # Test 4: 1D → 2D with k=-1 (sub-diagonal)
 # ------------------------------------------------------------------
-D4 = diag(v2, k=-1)
+D4 = cnp.diag(v2, k=-1)
 execute(interface)
 result4 = D4.get(interface)
 expected4 = np.diag(v2_np, k=-1)
@@ -84,7 +79,7 @@ if not np.allclose(result4, expected4):
 # ------------------------------------------------------------------
 # Test 5: 2D → 1D with k=1 (extract super-diagonal)
 # ------------------------------------------------------------------
-d5 = diag(A, k=1)
+d5 = cnp.diag(A, k=1)
 execute(interface)
 result5 = d5.get(interface)
 expected5 = np.diag(A_np, k=1)
@@ -96,7 +91,7 @@ if not np.allclose(result5, expected5):
 # ------------------------------------------------------------------
 # Test 6: 2D → 1D with k=-1 (extract sub-diagonal)
 # ------------------------------------------------------------------
-d6 = diag(A, k=-1)
+d6 = cnp.diag(A, k=-1)
 execute(interface)
 result6 = d6.get(interface)
 expected6 = np.diag(A_np, k=-1)
@@ -109,11 +104,10 @@ if not np.allclose(result6, expected6):
 # Test 7: Non-square matrix — extract diagonal
 # ------------------------------------------------------------------
 M, K = 64, 128
-B = create_array((M, K), dtype=np.float64)
-B = B + 3
+B = cnp.full((M, K), 3.0, dtype=cnp.float64)
 execute(interface)
 
-d7 = diag(B)
+d7 = cnp.diag(B)
 execute(interface)
 result7 = d7.get(interface)
 B_np = np.full((M, K), 3.0, dtype=np.float64)

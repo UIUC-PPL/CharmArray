@@ -132,6 +132,15 @@ def _collect_garbage():
     gc.collect()
 
 
+@pytest.fixture(autouse=True)
+def _reset_frontend_state():
+    from charmtyles.core import reset_frontend_state
+
+    reset_frontend_state()
+    yield
+    reset_frontend_state()
+
+
 @pytest.fixture(scope="session")
 def interface(pytestconfig, tmp_path_factory):
     from charmnumeric.interface import LocalCluster, CharmNumericInterface

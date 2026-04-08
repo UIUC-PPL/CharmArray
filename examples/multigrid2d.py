@@ -11,9 +11,8 @@ Usage:
 """
 
 import argparse
-from charmnumeric.charmnumeric import create_array
+import charmnumeric as cnp
 from charmtyles.core import execute
-from charmtyles.interface import CCSInterface
 import numpy as np
 
 
@@ -36,8 +35,7 @@ def compute_residual(u, f, h2):
     Discrete Laplacian: Lap(u)[i,j] = (u[i-1,j]+u[i+1,j]+u[i,j-1]+u[i,j+1]-4*u[i,j]) / h^2
     For -Lap(u) = f, the residual is r = f - (-Lap(u)/h2) = f - (4*u - neighbors) / h2.
     """
-    r = create_array(u.shape, dtype=np.float64)
-    r[:, :] = 0.0
+    r = cnp.zeros(u.shape, dtype=cnp.float64)
     r[1:-1, 1:-1] = f[1:-1, 1:-1] - (1.0 / h2) * (
         4.0 * u[1:-1, 1:-1]
         - u[:-2, 1:-1] - u[2:, 1:-1]
@@ -145,8 +143,7 @@ def summarize_diff(label, backend, reference):
 def prolongate_and_correct(e_coarse, u_fine):
     """Prolongate a coarse correction with bilinear interpolation."""
     n_fine = u_fine.shape[0]
-    e_fine = create_array((n_fine, n_fine), dtype=np.float64)
-    e_fine[:, :] = 0.0
+    e_fine = cnp.zeros((n_fine, n_fine), dtype=cnp.float64)
     e_fine[2:-2:2, 2:-2:2] = e_coarse[1:-1, 1:-1]
     e_fine[1:-1:2, 2:-2:2] = 0.5 * (
         e_coarse[:-1, 1:-1] + e_coarse[1:, 1:-1]
@@ -196,7 +193,7 @@ def jacobi_smooth_numpy(u, f, h2, n_smooth, omega=2.0 / 3.0):
 
 def snapshot_backend(arr):
     """Materialize a full-array backend snapshot without flushing early."""
-    snap = create_array(arr.shape, dtype=np.float64)
+    snap = cnp.zeros(arr.shape, dtype=cnp.float64)
     snap[:, :] = arr[:, :]
     return snap
 
@@ -280,18 +277,16 @@ def vcycle(u, f, h, n_pre, n_post, coarse_sweeps=400):
     jacobi_smooth(u, f, h2, n_pre, omega)
 
     # Compute residual on fine grid
-    #r = create_array(u.shape, dtype=np.float64)
+    #r = cnp.zeros(u.shape, dtype=cnp.float64)
     r = compute_residual(u, f, h2)
 
     # Restrict residual to coarse grid
     n_coarse = (n - 1) // 2 + 1
-    r_coarse = create_array((n_coarse, n_coarse), dtype=np.float64)
-    r_coarse[:, :] = 0.0
+    r_coarse = cnp.zeros((n_coarse, n_coarse), dtype=cnp.float64)
     restrict_full_weighting(r, r_coarse)
 
     # Solve the coarse error equation recursively.
-    e_coarse = create_array((n_coarse, n_coarse), dtype=np.float64)
-    e_coarse[:, :] = 0.0
+    e_coarse = cnp.zeros((n_coarse, n_coarse), dtype=cnp.float64)
     vcycle(e_coarse, r_coarse, 2.0 * h, n_pre, n_post, coarse_sweeps)
 
     # Prolongate and correct
@@ -324,12 +319,10 @@ def vcycle_capture_backend(u, f, h, n_pre, n_post, coarse_sweeps=400):
     r = compute_residual(u, f, h2)
 
     n_coarse = (n - 1) // 2 + 1
-    r_coarse = create_array((n_coarse, n_coarse), dtype=np.float64)
-    r_coarse[:, :] = 0.0
+    r_coarse = cnp.zeros((n_coarse, n_coarse), dtype=cnp.float64)
     restrict_full_weighting(r, r_coarse)
 
-    e_coarse = create_array((n_coarse, n_coarse), dtype=np.float64)
-    e_coarse[:, :] = 0.0
+    e_coarse = cnp.zeros((n_coarse, n_coarse), dtype=cnp.float64)
     vcycle(e_coarse, r_coarse, 2.0 * h, n_pre, n_post, coarse_sweeps)
     e_coarse_snapshot = snapshot_backend(e_coarse)
 
@@ -353,7 +346,7 @@ def validate_restriction(interface, n):
     apply_validation_pattern_numpy(fine_ref)
     coarse_ref = restrict_full_weighting_numpy(fine_ref)
 
-    fine_probe = create_array((n, n), dtype=np.float64)
+    fine_probe = cnp.zeros((n, n), dtype=cnp.float64)
     apply_validation_pattern_backend(fine_probe)
     fine_backend = fine_probe.get(interface)
     print("")
@@ -363,8 +356,8 @@ def validate_restriction(interface, n):
 
     coarse_from_backend_fine = restrict_full_weighting_numpy(fine_backend)
 
-    fine = create_array((n, n), dtype=np.float64)
-    coarse = create_array(((n - 1) // 2 + 1, (n - 1) // 2 + 1), dtype=np.float64)
+    fine = cnp.zeros((n, n), dtype=cnp.float64)
+    coarse = cnp.zeros(((n - 1) // 2 + 1, (n - 1) // 2 + 1), dtype=cnp.float64)
     apply_validation_pattern_backend(fine)
     restrict_full_weighting(fine, coarse)
     coarse_backend = coarse.get(interface)
@@ -393,8 +386,8 @@ def validate_prolongation(interface, n):
     apply_validation_pattern_numpy(coarse_ref)
     fine_ref = prolongate_numpy(coarse_ref)
 
-    e_coarse = create_array((n_coarse, n_coarse), dtype=np.float64)
-    u_fine = create_array((n, n), dtype=np.float64)
+    e_coarse = cnp.zeros((n_coarse, n_coarse), dtype=cnp.float64)
+    u_fine = cnp.zeros((n, n), dtype=cnp.float64)
     apply_validation_pattern_backend(e_coarse)
     u_fine[:, :] = 0.0
     prolongate_and_correct(e_coarse, u_fine)
@@ -418,8 +411,8 @@ def validate_jacobi(interface, n, n_smooth=1):
     apply_validation_pattern_numpy(f_ref)
     u_expected = jacobi_smooth_numpy(u_ref, f_ref, h2, n_smooth, omega)
 
-    u_backend = create_array((n, n), dtype=np.float64)
-    f_backend = create_array((n, n), dtype=np.float64)
+    u_backend = cnp.zeros((n, n), dtype=cnp.float64)
+    f_backend = cnp.zeros((n, n), dtype=cnp.float64)
     apply_validation_pattern_backend(u_backend)
     apply_validation_pattern_backend(f_backend)
     jacobi_smooth(u_backend, f_backend, h2, n_smooth, omega)
@@ -444,8 +437,8 @@ def validate_residual(interface, n):
     apply_validation_pattern_numpy(f_ref)
     r_expected = compute_residual_numpy(u_ref, f_ref, h2)
 
-    u_backend = create_array((n, n), dtype=np.float64)
-    f_backend = create_array((n, n), dtype=np.float64)
+    u_backend = cnp.zeros((n, n), dtype=cnp.float64)
+    f_backend = cnp.zeros((n, n), dtype=cnp.float64)
     apply_validation_pattern_backend(u_backend)
     apply_validation_pattern_backend(f_backend)
     r_backend = compute_residual(u_backend, f_backend, h2)
@@ -468,8 +461,8 @@ def validate_vcycle(interface, n, n_pre, n_post, coarse_sweeps):
     f_ref[1:-1, 1:-1] = 1.0
     u_expected = vcycle_numpy(u_ref, f_ref, h, n_pre, n_post, coarse_sweeps)
 
-    u_backend = create_array((n, n), dtype=np.float64)
-    f_backend = create_array((n, n), dtype=np.float64)
+    u_backend = cnp.zeros((n, n), dtype=cnp.float64)
+    f_backend = cnp.zeros((n, n), dtype=cnp.float64)
     u_backend[:, :] = 0.0
     f_backend[:, :] = 0.0
     f_backend[1:-1, 1:-1] = 1.0
@@ -493,8 +486,8 @@ def validate_vcycles(interface, n, cycles, n_pre, n_post, coarse_sweeps):
     f_ref[1:-1, 1:-1] = 1.0
     u_expected = vcycles_numpy(u_ref, f_ref, h, cycles, n_pre, n_post, coarse_sweeps)
 
-    u_backend = create_array((n, n), dtype=np.float64)
-    f_backend = create_array((n, n), dtype=np.float64)
+    u_backend = cnp.zeros((n, n), dtype=cnp.float64)
+    f_backend = cnp.zeros((n, n), dtype=cnp.float64)
     u_backend[:, :] = 0.0
     f_backend[:, :] = 0.0
     f_backend[1:-1, 1:-1] = 1.0
@@ -519,8 +512,8 @@ def validate_vcycle_stages(interface, n, n_pre, n_post, coarse_sweeps):
     f_ref[1:-1, 1:-1] = 1.0
     expected = vcycle_numpy_capture(u_ref, f_ref, h, n_pre, n_post, coarse_sweeps)
 
-    u_backend = create_array((n, n), dtype=np.float64)
-    f_backend = create_array((n, n), dtype=np.float64)
+    u_backend = cnp.zeros((n, n), dtype=cnp.float64)
+    f_backend = cnp.zeros((n, n), dtype=cnp.float64)
     u_backend[:, :] = 0.0
     f_backend[:, :] = 0.0
     f_backend[1:-1, 1:-1] = 1.0
@@ -592,8 +585,7 @@ def main():
     h = 1.0 / (n - 1)
 
     # Solution array with zero initial guess
-    u = create_array((n, n), dtype=np.float64)
-    u[:, :] = 0.0
+    u = cnp.zeros((n, n), dtype=cnp.float64)
 
     # Boundary conditions: u = 0 on all boundaries (already set)
     # Could set non-trivial BCs here, e.g.:
@@ -601,8 +593,7 @@ def main():
 
     # Right-hand side: f = 2*pi^2 * sin(pi*x) * sin(pi*y)
     # (exact solution is u = sin(pi*x) * sin(pi*y))
-    f = create_array((n, n), dtype=np.float64)
-    f[:, :] = 0.0
+    f = cnp.zeros((n, n), dtype=cnp.float64)
 
     # Since we can't fill f point-by-point efficiently in this DSL,
     # we set a uniform RHS for demonstration.
@@ -610,7 +601,7 @@ def main():
     f[1:-1, 1:-1] = 1.0
 
     # Connect to backend
-    interface = CCSInterface()
+    interface = cnp.CharmNumericInterface()
     interface.connect(args.host, args.port, args.odf)
 
     if args.mode in ("validate-restrict", "both"):

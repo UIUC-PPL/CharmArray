@@ -5,24 +5,20 @@ to verify that the slice-aware cross-partition matmul produces
 correct results directly from view metadata.
 """
 
-from charmnumeric.charmnumeric import create_array
+import charmnumeric as cnp
 from charmtyles.core import execute
-from charmtyles.interface import CCSInterface
 import numpy as np
 
-interface = CCSInterface()
+interface = cnp.CharmNumericInterface()
 interface.connect('192.168.1.114', 1234, 4)
 
 M, N = 128, 128
 
 # Build a matrix with a known pattern: A[i, j] = 1
-A = create_array((M, N), dtype=np.float64)
-A = A + 1
+A = cnp.ones((M, N), dtype=cnp.float64)
 
 # Build a 1D vector: x[i] = i + 1
-x = create_array((N,), dtype=np.float64)
-for i in range(N):
-    x[i:i+1] = float(i + 1)
+x = cnp.arange(1, N + 1, dtype=cnp.float64)
 
 # NumPy reference
 A_np = np.ones(M * N, dtype=np.float64).reshape(M, N)
@@ -100,8 +96,7 @@ if not np.allclose(result_mis.flatten(), expected_mis):
 # Test 6: 3D array with dimension dropping — A3d[0, :, :] @ x
 # ------------------------------------------------------------------
 B = 2  # batch size
-A3d = create_array((B, M, N), dtype=np.float64)
-A3d = A3d + 1  # All ones
+A3d = cnp.ones((B, M, N), dtype=cnp.float64)
 
 A3d_slice = A3d[0, :, :]  # shape (1, M, N) — singleton dim 0
 y_3d = A3d_slice.matvec(x)

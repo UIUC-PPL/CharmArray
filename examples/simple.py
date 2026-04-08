@@ -1,11 +1,9 @@
-from charmnumeric.charmnumeric import create_array
-from charmtyles.core import plot_execution_state, execute
-from charmtyles.interface import CCSInterface
-import numpy as np
+import charmnumeric as cnp
+from charmtyles.core import execute
 
-a = create_array((128,), dtype=np.float32)
-b = create_array((128,), dtype=np.float32)
-#c = create_array(10, dtype=np.float32)
+a = cnp.zeros((128,), dtype=cnp.float32)
+b = cnp.zeros((128,), dtype=cnp.float32)
+#c = cnp.zeros(10, dtype=cnp.float32)
 
 x = 2 * (a + b + 3)
 x[:50] = x[70:120] + 1
@@ -20,7 +18,7 @@ x[:50] = x[70:120] + 1
 # b[0] = a[0] * 3
 
 #plot_execution_state()
-interface = CCSInterface()
+interface = cnp.CharmNumericInterface()
 interface.connect('192.168.1.114', 1234, 4)
 execute(interface)
 

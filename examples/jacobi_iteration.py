@@ -7,13 +7,11 @@ We build a diagonally dominant SPD matrix so convergence is guaranteed,
 then verify the result against NumPy's direct solve.
 """
 
-from charmnumeric.charmnumeric import create_array
-from charmnumeric.operations import diag
+import charmnumeric as cnp
 from charmtyles.core import execute
-from charmtyles.interface import CCSInterface
 import numpy as np
 
-interface = CCSInterface()
+interface = cnp.CharmNumericInterface()
 interface.connect('192.168.1.115', 1234, 4)
 
 N = 128
@@ -22,35 +20,25 @@ max_iter = 50
 # --- Build a diagonally dominant matrix A ------------------------------------
 # A = 2*N*I + ones (all off-diagonal entries are 1, diagonal entries are 2*N+1)
 # This is SPD and diagonally dominant, so Jacobi converges.
-A = create_array((N, N), dtype=np.float64)
-A[:, :] = 1.0                          # all ones
-A_diag_vec = create_array((N,), dtype=np.float64)
-A_diag_vec[:] = 2.0 * N                # extra diagonal weight
-D_mat = diag(A_diag_vec)               # diagonal matrix
+A = cnp.ones((N, N), dtype=cnp.float64)
+A_diag_vec = cnp.full((N,), 2.0 * N, dtype=cnp.float64)
+D_mat = cnp.diag(A_diag_vec)           # diagonal matrix
 execute(interface)
 
 A = A + D_mat                           # A = ones + 2N*I  (diag = 2N+1)
 execute(interface)
 
 # --- Right-hand side b -------------------------------------------------------
-b = create_array((N,), dtype=np.float64)
-b[:] = 1.0
+b = cnp.ones((N,), dtype=cnp.float64)
 execute(interface)
 
 # --- Extract diagonal and compute D_inv (element-wise reciprocal) ------------
-d = diag(A)                            # extract diagonal → 1D vector
+d = cnp.diag(A)                        # extract diagonal → 1D vector
 execute(interface)
 
 d_np = d.get(interface)
-# Compute D_inv as a vector on the host and upload it
-d_inv_np = 1.0 / d_np
-D_inv = create_array((N,), dtype=np.float64)
-D_inv[:] = 0.0
-execute(interface)
-# Set each element (for now, construct from the known constant diagonal)
-# Since all diagonal entries are (2N+1), D_inv is a constant vector
 d_inv_val = 1.0 / (2.0 * N + 1.0)
-D_inv = D_inv + d_inv_val
+D_inv = cnp.full((N,), d_inv_val, dtype=cnp.float64)
 execute(interface)
 
 # --- Jacobi iteration --------------------------------------------------------
@@ -61,8 +49,7 @@ execute(interface)
 # Direct form: x = D_inv * (b - R x)  where R = A - diag(A)
 # Equivalently: x = D_inv * (b - A x + d * x)
 
-x = create_array((N,), dtype=np.float64)
-x[:] = 0.0                             # initial guess
+x = cnp.zeros((N,), dtype=cnp.float64)  # initial guess
 execute(interface)
 
 for it in range(max_iter):

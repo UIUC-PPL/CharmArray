@@ -4,12 +4,10 @@ Solves  -laplacian(phi) = f  on a unit square with zero Dirichlet BCs.
 Uses red-black ordering via strided slicing for parallel-safe updates.
 """
 
-from charmnumeric.charmnumeric import create_array
-from charmtyles.core import execute
-from charmtyles.interface import CCSInterface
+import charmnumeric as cnp
 import numpy as np
 
-interface = CCSInterface()
+interface = cnp.CharmNumericInterface()
 interface.connect('192.168.1.115', 1234, 4)
 
 N = 512
@@ -18,16 +16,12 @@ h2 = h ** 2
 max_iter = 10
 
 # --- Setup arrays ---
-phi = create_array((N, N), dtype=np.float64)
-phi[:, :] = 0.0
+phi = cnp.zeros((N, N), dtype=cnp.float64)
 
-f = create_array((N, N), dtype=np.float64)
-f[:, :] = 0.0
-execute(interface)
+f = cnp.zeros((N, N), dtype=cnp.float64)
 
 # Point source in the middle
 f[N // 2, N // 2] = -100.0
-execute(interface)
 
 # --- Red-Black Gauss-Seidel iterations ---
 for it in range(max_iter):
@@ -58,8 +52,6 @@ for it in range(max_iter):
         + phi[2:-1:2, 0:-2:2] + phi[2:-1:2, 2::2]
         - h2 * f[2:-1:2, 1:-1:2]
     )
-
-    #execute(interface)
 
 result = phi.get(interface)
 print(f"Gauss-Seidel ({max_iter} iterations, N={N})")

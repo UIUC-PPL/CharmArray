@@ -4,22 +4,19 @@ Creates matrices and performs matmatmul in various configurations,
 verifying against NumPy reference results.
 """
 
-from charmnumeric.charmnumeric import create_array
+import charmnumeric as cnp
 from charmtyles.core import execute
-from charmtyles.interface import CCSInterface
 import numpy as np
 
-interface = CCSInterface()
+interface = cnp.CharmNumericInterface()
 interface.connect('192.168.1.115', 1234, 4)
 
 M, K, N = 128, 128, 128
 
 # Build matrices with known patterns
 # A[i, j] = i + j + 1, B[i, j] = i - j + 1
-A = create_array((M, K), dtype=np.float64)
-B = create_array((K, N), dtype=np.float64)
-A = A + 1
-B = B + 1
+A = cnp.ones((M, K), dtype=cnp.float64)
+B = cnp.ones((K, N), dtype=cnp.float64)
 # for i in range(M):
 #     for j in range(K):
 #         A[i:i+1, j:j+1] = float(i + j + 1)
@@ -49,10 +46,8 @@ if not np.allclose(result, expected):
 # Test 2: Non-square — A(128×64) @ B(64×256)
 # ------------------------------------------------------------------
 M2, K2, N2 = 128, 64, 256
-A2 = create_array((M2, K2), dtype=np.float64)
-B2 = create_array((K2, N2), dtype=np.float64)
-A2 = A2 + 1  # all ones
-B2 = B2 + 1  # all ones
+A2 = cnp.ones((M2, K2), dtype=cnp.float64)
+B2 = cnp.ones((K2, N2), dtype=cnp.float64)
 execute(interface)
 
 C2 = A2 @ B2
@@ -123,8 +118,7 @@ if not np.allclose(result6, expected6):
 # ------------------------------------------------------------------
 # Test 7: Chain — (A @ B) @ x (matmatmul then matvec)
 # ------------------------------------------------------------------
-x = create_array((N,), dtype=np.float64)
-x = x + 1  # all ones
+x = cnp.ones((N,), dtype=cnp.float64)
 execute(interface)
 
 C_chain = A @ B
@@ -142,8 +136,7 @@ if not np.allclose(result7.flatten(), expected7):
 # Test 8: 3D dim-drop — A3d[0, :, :] @ B
 # ------------------------------------------------------------------
 Batch = 2
-A3d = create_array((Batch, M, K), dtype=np.float64)
-A3d = A3d + 1  # all ones
+A3d = cnp.ones((Batch, M, K), dtype=cnp.float64)
 execute(interface)
 
 A3d_slice = A3d[0, :, :]  # shape (1, M, K) — singleton dim 0

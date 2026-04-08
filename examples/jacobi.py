@@ -1,10 +1,8 @@
-from charmnumeric.charmnumeric import create_array
-from charmtyles.core import plot_execution_state, execute
-from charmtyles.interface import CCSInterface
-import numpy as np
+import charmnumeric as cnp
+from charmtyles.core import execute
 
-u = create_array((128,), dtype=np.float32)
-#b = create_array((100, 100), dtype=np.float32)
+u = cnp.zeros((128,), dtype=cnp.float32)
+#b = cnp.zeros((100, 100), dtype=cnp.float32)
 
 
 # u[0, :] = 1.0
@@ -24,7 +22,7 @@ for it in range(3):
     #u, u2 = u2, u
 
 #plot_execution_state()
-interface = CCSInterface()
+interface = cnp.CharmNumericInterface()
 interface.connect('192.168.1.114', 1234, 4)
 execute(interface)
 

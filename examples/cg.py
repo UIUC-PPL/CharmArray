@@ -5,9 +5,7 @@ We build a simple SPD matrix  A = I + ones  (the identity plus a constant
 matrix) so the answer is easy to verify with NumPy.
 """
 
-from charmnumeric.charmnumeric import create_array
-from charmtyles.core import execute
-from charmtyles.interface import CCSInterface
+import charmnumeric as cnp
 import numpy as np
 
 N = 128
@@ -15,30 +13,25 @@ max_iter = 2
 
 # --- Build a symmetric positive-definite matrix A = (N+1)*I + ones --------
 # This is SPD because eigenvalues are (N+1) (multiplicity N-1) and (2N+1).
-A = create_array((N, N), dtype=np.float64)
+A = cnp.ones((N, N), dtype=cnp.float64)
 for i in range(N):
-    A[i, :] = 1.0          # all ones
     A[i, i] = N + 1.0      # add N to diagonal -> diag = N+1
 
 # --- Right-hand side b = [1, 2, ..., N] -----------------------------------
 # (Not an eigenvector of A, so CG needs multiple iterations.)
-b = create_array((N,), dtype=np.float64)
-for i in range(N):
-    b[i:i+1] = float(i + 1)
+b = cnp.arange(1, N + 1, dtype=cnp.float64)
 
 # --- CG iteration ---------------------------------------------------------
 # x0 = 0, r0 = b - A*x0 = b, p0 = r0
-x = create_array((N,), dtype=np.float64)
+x = cnp.zeros((N,), dtype=cnp.float64)
 
-r = create_array((N,), dtype=np.float64)
-r[:] = b
+r = b.copy()
 
-p = create_array((N,), dtype=np.float64)
-p[:] = b
+p = b.copy()
 
 rtr = r @ r          # r^T r  (dot product via matvec on column vec)
 
-interface = CCSInterface()
+interface = cnp.CharmNumericInterface()
 interface.connect('192.168.1.115', 1234, 4)
 
 tol = 1e-12
@@ -64,8 +57,6 @@ for k in range(max_iter):
         if rtr_val.item() < tol:
             print(f"  Converged at iteration {k+1}")
             break
-
-execute(interface)
 
 result = x.get(interface)
 print("CG solution x:")
