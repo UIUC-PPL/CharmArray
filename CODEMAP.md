@@ -87,6 +87,13 @@ Distributed N-dimensional array DSL built on charmtyles. Supports up to 3D array
 | `ReduceContrib` | 264 | 24-byte dot reduction contribution |
 | `reduce_dot_sum` | 274 | Custom reducer for dot products |
 
+### `decomposition_solver.hpp` — Standalone decomposition solver (1716 lines)
+| Symbol | Line | Description |
+|--------|------|-------------|
+| `decomposition_solver::compute_decompositions()` | 95 | Charm-free decomposition solver used by the runtime and standalone tests |
+| `detail::for_each_node_topo()` | 59 | Topological DAG traversal helper for solver passes |
+| `collect_unionable_nonfixed_leaves()` | 515 | Union-find guard: only unions zero-shift, same-tile, non-fixed temp leaves |
+
 ### `array_region.hpp` — N-D regions & decomposition (449+ lines)
 | Symbol | Line | Description |
 |--------|------|-------------|
@@ -122,8 +129,7 @@ Distributed N-dimensional array DSL built on charmtyles. Supports up to 3D array
 | File | Description |
 |------|-------------|
 | `server.cpp` | Main chare, creates ArrayDAGGroup |
-| `dag_group_runtime.cpp` | ArrayDAGGroup constructor, set_proxies, receive_get_request, gather |
-| `dag_group_decomp.cpp` | Array decomposition computation |
+| `dag_group_runtime.cpp` | ArrayDAGGroup constructor, `compute_decompositions()`, set_proxies, receive_get_request, gather |
 | `dag_group_compile.cpp` | JIT compilation orchestration |
 | `dag_group_receive.cpp` | DAG reception and dispatch |
 | `execute_node.cpp` | `execute_node_nd<N,T>()` — dispatches JIT kernels, handles MATMUL/REDUCE/TILE/DIAG |
@@ -140,6 +146,18 @@ Distributed N-dimensional array DSL built on charmtyles. Supports up to 3D array
 | `partition_comm.cpp` | `receive_data()` inter-chare communication |
 | `partition_get.cpp` | `process_get()` — gather results to PE 0 |
 | `jit.cpp` | MLIRJitCompiler implementation — buildFromAST, emitOp |
+
+## Standalone C++ Tests (`example/charmnumeric/tests/`)
+
+### `test_compute_decompositions.cpp` — Standalone decomposition coverage (416 lines)
+| Symbol | Line | Description |
+|--------|------|-------------|
+| `test_shifted_copy_uses_absolute_offset()` | 128 | Checks lifted absolute offset for a simple shifted copy |
+| `test_shifted_expression_temp_uses_absolute_representative()` | 177 | Verifies shifted RHS temp keeps absolute representative `150` |
+| `test_jacobi1d_temp_offset()` | 207 | 1D Jacobi temp regression: offset should be `1` |
+| `test_jacobi2d_temp_offset()` | 259 | 2D Jacobi temp regression: offset should be `(1,1)` |
+| `test_jacobi3d_temp_offset()` | 317 | 3D Jacobi temp regression: offset should be `(1,1,1)` |
+| `test_strided_copy_reduces_tile_and_sets_offset()` | 374 | Stride-2 access regression: tile reduction and absolute offset lifting |
 
 ### `backend.ci` — Charm++ interface (86 lines)
 Module `charmnumeric` (depends on `charmtyles`). Mainchare `Main`. Group `ArrayDAGGroup : DAGGroup` with entries: `set_proxies()`, `proxies_ready()` [reduction], `receive_dag()`, `receive_get_request()`, `gather()`. Arrays `Partition1D/2D/3D` with entries: `run()`, `receive_data()` [nocopy/nocopydevice], `send_complete()`, `comm_done()`, `reduce_result()`.
