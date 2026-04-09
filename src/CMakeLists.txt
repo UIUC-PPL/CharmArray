@@ -128,11 +128,40 @@ endif()
 target_compile_options(jit_obj PRIVATE -O3 -g ${SIMPLE_ARRAY_DEFS})
 
 # -- Backend module (Charm++ classes + JIT integration) --
-add_library(backend_obj OBJECT
-    dag_group.cpp
+set(BACKEND_GROUP_SOURCES
+    dag_group_runtime.cpp
+    dag_group_receive.cpp
+    dag_group_decomp.cpp
+    dag_group_compile.cpp
+)
+
+set(BACKEND_NODE_SOURCES
     execute_node.cpp
-    executor.cpp
-    partition.cpp
+    execute_node_regions.cpp
+)
+
+set(BACKEND_EXECUTOR_SOURCES
+    executor_reducer.cpp
+    executor_core.cpp
+    executor_reduce.cpp
+    executor_matmul.cpp
+    executor_matmatmul.cpp
+    executor_transfer.cpp
+    executor_incremental.cpp
+    executor_ast_visitor.cpp
+)
+
+set(BACKEND_PARTITION_SOURCES
+    partition_lifecycle.cpp
+    partition_comm.cpp
+    partition_get.cpp
+)
+
+add_library(backend_obj OBJECT
+    ${BACKEND_GROUP_SOURCES}
+    ${BACKEND_NODE_SOURCES}
+    ${BACKEND_EXECUTOR_SOURCES}
+    ${BACKEND_PARTITION_SOURCES}
 )
 add_dependencies(backend_obj ci_headers)
 target_compile_options(backend_obj PRIVATE -O3 -g ${SIMPLE_ARRAY_DEFS})
