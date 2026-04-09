@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from charmnumeric.operations import diag
-from charmnumeric.charmnumeric import create_array
+from charmnumeric.charmnumeric import arange, create_array
 
 
 pytestmark = pytest.mark.integration
@@ -33,6 +33,16 @@ def test_elementwise_add_roundtrip_all_ranks(interface, shape):
 
     got = (lhs + rhs).get(interface)
     want = np.full(shape, 2.0, dtype=np.float32)
+
+    np.testing.assert_allclose(got, want)
+
+
+def test_shifted_slice_expression_get_matches_numpy(interface):
+    src = arange(512, dtype=np.float32)
+
+    got = (src[100:300] + src[150:350]).get(interface)
+    host = np.arange(512, dtype=np.float32)
+    want = host[100:300] + host[150:350]
 
     np.testing.assert_allclose(got, want)
 

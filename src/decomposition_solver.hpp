@@ -1,15 +1,100 @@
-#include "backend_internal.hpp"
-#include "dag_group_internal.hpp"
+#pragma once
+
+#include "array_region.hpp"
+#include "opcodes.hpp"
 
 #include <algorithm>
+#include <array>
+#include <cassert>
 #include <functional>
 #include <limits>
 #include <queue>
 #include <stack>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
-void ArrayDAGGroup::compute_decompositions(DAG* dag) {
+#ifndef CT_MIN_TILE_1D
+#ifdef USE_KOKKOS
+#define CT_MIN_TILE_1D 1048576
+#define CT_MIN_TILE_2D 1024
+#define CT_MIN_TILE_3D 128
+#else
+#define CT_MIN_TILE_1D 262144
+#define CT_MIN_TILE_2D 512
+#define CT_MIN_TILE_3D 64
+#endif
+#endif
+
+namespace decomposition_solver {
+
+namespace detail {
+
+inline int next_pow2(int v) {
+    if (v <= 1)
+        return 1;
+    v--;
+    v |= v >> 1;
+    v |= v >> 2;
+    v |= v >> 4;
+    v |= v >> 8;
+    v |= v >> 16;
+    return v + 1;
+}
+
+inline int ct_min_tile(int ndims) {
+    switch (ndims) {
+    case 1:
+        return CT_MIN_TILE_1D;
+    case 2:
+        return CT_MIN_TILE_2D;
+    case 3:
+        return CT_MIN_TILE_3D;
+    default:
+        return 1;
+    }
+}
+
+template <typename Fn>
+inline void for_each_node_topo(DAG* dag, Fn&& fn) {
+    if (dag == nullptr)
+        return;
+
+    std::queue<DAGNode*> topo_queue;
+    std::unordered_map<DAGNode*, int> remaining_parents;
+    remaining_parents.reserve(dag->nodes.size());
+
+    for (auto& [id, node] : dag->nodes) {
+        remaining_parents[node] = node->num_parents;
+        if (node->num_parents == 0)
+            topo_queue.push(node);
+    }
+
+    int processed = 0;
+    while (!topo_queue.empty()) {
+        DAGNode* dag_node = topo_queue.front();
+        topo_queue.pop();
+        processed++;
+        fn(dag_node);
+
+        for (DAGNode* child : dag_node->children) {
+            auto it = remaining_parents.find(child);
+            if (it == remaining_parents.end())
+                continue;
+            if (--it->second == 0)
+                topo_queue.push(child);
+        }
+    }
+
+    assert(processed == static_cast<int>(dag->nodes.size()));
+}
+
+} // namespace detail
+
+template <typename ArrayMetaMap>
+void compute_decompositions(ArrayMetaMap& array_meta, DAG* dag, int odf, int num_pes) {
+    using ArrayMetadata = typename ArrayMetaMap::mapped_type;
+
     auto zero_offset = std::array<int, 3>{0, 0, 0};
 
     auto compute_tile_count = [](const ArrayMetadata& m) -> int {
@@ -20,21 +105,18 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
     };
 
     auto clamp_tile_for_max_count = [&](ArrayMetadata& m) {
-        int max_tiles = odf * CkNumPes();
+        int max_tiles = std::max(1, odf) * std::max(1, num_pes);
         while (compute_tile_count(m) > max_tiles)
             m.tile *= 2;
     };
 
     for (auto& [name, meta] : array_meta) {
         if (meta.tile == 0)
-            meta.tile = ct_min_tile(meta.ndims);
+            meta.tile = detail::ct_min_tile(meta.ndims);
 
         if (!meta.decomp_final) {
-            // Ensure tile is a power of 2 and at least ct_min_tile
-            meta.tile = std::max(next_pow2(meta.tile), ct_min_tile(meta.ndims));
-            // Ensure tile count does not exceed ODF * CkNumPes
+            meta.tile = std::max(detail::next_pow2(meta.tile), detail::ct_min_tile(meta.ndims));
             clamp_tile_for_max_count(meta);
-
             meta.offset = zero_offset;
         }
     }
@@ -121,7 +203,10 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
             }
         };
 
-        auto tile_fits_grid = [](const ArrayMetadata& meta, int tile) { return tile > 0; };
+        auto tile_fits_grid = [](const ArrayMetadata& meta, int tile) {
+            (void)meta;
+            return tile > 0;
+        };
 
         auto try_assign_tile = [&](int array_name, int candidate_tile) {
             auto array_it = array_meta.find(array_name);
@@ -134,8 +219,8 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
             if (candidate_tile <= 0)
                 return false;
 
-            // Clamp to power-of-2 and minimum tile size
-            candidate_tile = std::max(next_pow2(candidate_tile), ct_min_tile(meta.ndims));
+            candidate_tile =
+                std::max(detail::next_pow2(candidate_tile), detail::ct_min_tile(meta.ndims));
 
             if (meta.tile > 0 && candidate_tile >= meta.tile)
                 return false;
@@ -163,9 +248,6 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
             return try_assign_tile(array_name, candidate_tile);
         };
 
-        // collect_tile_candidates needs a temp-name -> defining-root map so it
-        // can follow through fused temps (flat leaf references) to find the
-        // ultimate source arrays and their strided access regions.
         auto collect_tile_candidates =
             [&](auto&& self, int array_name, int ndims, ASTNode* node, Region* carried_region,
                 const std::unordered_map<int, ASTNode*>& temp_defs) -> bool {
@@ -180,8 +262,6 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                 return false;
             }
 
-            // If this is a leaf referencing a temp, follow through its
-            // defining root's operands to find the real source arrays.
             if (node->operands.empty()) {
                 auto def_it = temp_defs.find(node->result_name);
                 if (def_it != temp_defs.end()) {
@@ -206,17 +286,19 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
             return changed;
         };
 
-        // Phase 1: infer smaller tiles from strided source accesses, then
-        // propagate those tiles through same-scale elementwise pipelines.
+        auto is_ast_leaf = [](ASTNode* node) -> bool {
+            for (ASTNode* child : node->operands)
+                if (child != nullptr && !child->is_scalar && !child->is_broadcast)
+                    return false;
+            return true;
+        };
+
         bool tiles_changed = true;
         int max_tile_passes = std::max(64, static_cast<int>(array_meta.size()));
         for (int iter = 0; iter < max_tile_passes && tiles_changed; ++iter) {
             tiles_changed = false;
 
-            dag_group_for_each_node_topo(dag, [&](DAGNode* dag_node) {
-                // Build a map from temp names to their defining AST roots
-                // within this fused DAG node, so collect_tile_candidates can
-                // follow through flat temp leaf references.
+            detail::for_each_node_topo(dag, [&](DAGNode* dag_node) {
                 std::unordered_map<int, ASTNode*> temp_defs;
                 for (ASTNode* root : dag_node->ast->roots) {
                     if (root->is_temp)
@@ -235,7 +317,6 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                         if (dst_it == array_meta.end())
                             continue;
 
-                        // Same-dim tile propagation.
                         if (region_is_dense(ast_node->region, dst_it->second.ndims)) {
                             for (int op_idx = 1; op_idx < (int)ast_node->operands.size();
                                  ++op_idx) {
@@ -249,9 +330,6 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                             }
                         }
 
-                        // Cross-dim tile propagation: propagate tile from the
-                        // higher-dim array to the lower-dim slice array so that
-                        // their shared dimensions use a consistent tile size.
                         for (int op_idx = 1; op_idx < (int)ast_node->operands.size(); ++op_idx) {
                             ASTNode* src_op = ast_node->operands[op_idx];
                             if (!is_ast_leaf(src_op))
@@ -260,9 +338,7 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                             if (src_it_cd == array_meta.end())
                                 continue;
                             if (src_it_cd->second.ndims == dst_it->second.ndims)
-                                continue; // same-dim handled above
-                            // Propagate tile from whichever array is higher-dim to
-                            // the lower-dim one.
+                                continue;
                             int higher_tile;
                             int lower_name_cd;
                             if (src_it_cd->second.ndims > dst_it->second.ndims) {
@@ -298,7 +374,6 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
             });
         }
 
-        // Re-enforce max tile count after Phase 1 stride-based reductions.
         for (auto& [name, meta] : array_meta) {
             if (!meta.decomp_final)
                 clamp_tile_for_max_count(meta);
@@ -362,8 +437,6 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
             return region_step;
         };
 
-        // Returns the stop coordinates of a region, falling back to global_shape for
-        // global regions. Used to compute region sizes for cross-dim mapping.
         auto extract_region_stop = [](Region* region_base, int ndims,
                                       const std::array<int, 3>& global_shape) {
             std::array<int, 3> region_stop = {0, 0, 0};
@@ -397,20 +470,11 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
             return region_stop;
         };
 
-        // ---------------------------------------------------------------
-        // Phase 2: Build equivalence classes via Union-Find.
-        //
-        // Arrays connected by shift-0, stride-1, same-tile edges in
-        // elementwise ops must share the same offset for zero
-        // communication.  We group them into equivalence classes.
-        // ---------------------------------------------------------------
-
         auto circ_dist = [](int a, int b, int mod) -> int {
             int d = ((a - b) % mod + mod) % mod;
             return std::min(d, mod - d);
         };
 
-        // --- Union-Find ---
         std::unordered_map<int, int> uf_parent, uf_rank;
 
         auto uf_make = [&](int x) {
@@ -440,75 +504,63 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
         for (auto& [name, meta] : array_meta)
             uf_make(name);
 
-        // Helper: check whether an ASTNode is a leaf (has no non-scalar
-        // children that correspond to materialized arrays).
-        auto is_ast_leaf = [](ASTNode* node) -> bool {
-            for (ASTNode* child : node->operands)
-                if (child != nullptr && !child->is_scalar && !child->is_broadcast)
-                    return false;
-            return true;
-        };
+        std::unordered_set<int> source_arrays;
 
-        // Helper: for a leaf operand accessed with a given region, check
-        // whether the edge is shift-0, stride-1, same-tile and union the
-        // source with the output if so.
-        auto try_union_edge = [&](int out_name, int nd, int out_tile, ASTNode* leaf,
-                                  Region* region) {
-            int src_name = leaf->result_name;
-            if (src_name == out_name)
-                return;
-            auto src_it = array_meta.find(src_name);
-            if (src_it == array_meta.end() || src_it->second.ndims != nd)
-                return;
-            if (src_it->second.tile != out_tile)
-                return;
+        detail::for_each_node_topo(dag, [&](DAGNode* dag_node) {
+            for (ASTNode* ast_node : dag_node->ast->roots)
+                if (static_cast<Opcode>(ast_node->opcode) == Opcode::CREATE)
+                    source_arrays.insert(ast_node->result_name);
+        });
 
-            if (region == nullptr || region->is_global) {
-                uf_unite(out_name, src_name);
-                return;
-            }
-
-            auto rstart = extract_region_start(region, nd);
-            auto rstep = extract_region_step(region, nd);
-            for (int d = 0; d < nd; ++d) {
-                if (rstart[d] != 0 || rstep[d] != 1)
-                    return;
-            }
-            uf_unite(out_name, src_name);
-        };
-
-        // Recursive leaf visitor that calls try_union_edge on every leaf.
-        auto visit_leaves_for_union = [&](auto&& self, ASTNode* node, int out_name, int nd,
-                                          int out_tile, Region* carried_region) -> void {
+        auto collect_unionable_nonfixed_leaves = [&](auto&& self, ASTNode* node, int out_name,
+                                                     int nd, int out_tile,
+                                                     Region* carried_region,
+                                                     std::vector<int>& leaves) -> void {
             if (node == nullptr || node->is_scalar || node->is_broadcast)
                 return;
+
             if (is_ast_leaf(node)) {
-                try_union_edge(out_name, nd, out_tile, node, carried_region);
+                int src_name = node->result_name;
+                if (src_name == out_name)
+                    return;
+
+                auto src_it = array_meta.find(src_name);
+                if (src_it == array_meta.end() || src_it->second.ndims != nd ||
+                    src_it->second.tile != out_tile)
+                    return;
+
+                bool is_fixed_source = src_it->second.decomp_final || source_arrays.count(src_name);
+                if (is_fixed_source)
+                    return;
+
+                if (carried_region != nullptr && !carried_region->is_global) {
+                    auto rstart = extract_region_start(carried_region, nd);
+                    auto rstep = extract_region_step(carried_region, nd);
+                    for (int d = 0; d < nd; ++d) {
+                        if (rstart[d] != 0 || rstep[d] != 1)
+                            return;
+                    }
+                }
+
+                leaves.push_back(src_name);
                 return;
             }
+
             for (int i = 0; i < (int)node->operands.size(); ++i) {
                 ASTNode* child = node->operands[i];
                 if (child == nullptr || child->is_scalar || child->is_broadcast)
                     continue;
                 Region* child_region = node->get_operand_region(i);
-                if (is_ast_leaf(child)) {
-                    try_union_edge(out_name, nd, out_tile, child,
-                                   child_region ? child_region : carried_region);
-                } else {
-                    self(self, child, out_name, nd, out_tile, child_region);
-                }
+                self(self, child, out_name, nd, out_tile,
+                     child_region ? child_region : carried_region, leaves);
             }
         };
 
-        // Identify source (CREATE) arrays and build unions for elementwise ops.
-        std::unordered_set<int> source_arrays;
-
-        dag_group_for_each_node_topo(dag, [&](DAGNode* dag_node) {
+        detail::for_each_node_topo(dag, [&](DAGNode* dag_node) {
             for (ASTNode* ast_node : dag_node->ast->roots) {
                 Opcode op = static_cast<Opcode>(ast_node->opcode);
 
                 if (op == Opcode::CREATE) {
-                    source_arrays.insert(ast_node->result_name);
                     continue;
                 }
 
@@ -520,18 +572,18 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                     int nd = out_it->second.ndims;
                     int out_tile = out_it->second.tile;
 
+                    std::vector<int> union_leaves;
                     for (int op_idx = 0; op_idx < (int)ast_node->operands.size(); ++op_idx) {
                         ASTNode* operand = ast_node->operands[op_idx];
                         if (operand == nullptr || operand->is_scalar || operand->is_broadcast)
                             continue;
                         Region* op_region = ast_node->get_operand_region(op_idx);
-                        if (is_ast_leaf(operand)) {
-                            try_union_edge(out_name, nd, out_tile, operand, op_region);
-                        } else {
-                            visit_leaves_for_union(visit_leaves_for_union, operand, out_name, nd,
-                                                   out_tile, op_region);
-                        }
+                        collect_unionable_nonfixed_leaves(collect_unionable_nonfixed_leaves,
+                                                          operand, out_name, nd, out_tile,
+                                                          op_region, union_leaves);
                     }
+                    for (int src_name : union_leaves)
+                        uf_unite(out_name, src_name);
                     continue;
                 }
 
@@ -544,7 +596,6 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
             }
         });
 
-        // Build per-class metadata.
         struct ClassInfo {
             int tile = 0;
             int ndims = 0;
@@ -565,30 +616,18 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
             }
         }
 
-        // ---------------------------------------------------------------
-        // Phase 3: Build the shift graph between equivalence classes.
-        //
-        // Edges arise from operations where the access region has a
-        // non-zero shift, stride > 1, or different tile.  Each edge
-        // records the shift/stride and a weight (element count).
-        // ---------------------------------------------------------------
-
         struct ShiftEdge {
             int from_class;
             int to_class;
             std::array<int, 3> shift;
             std::array<int, 3> stride;
             int64_t weight;
-            bool forward; // true = original direction from_class -> to_class
-            // Dimension mapping for cross-dim edges (identity for same-dim edges).
-            // from_to_to[d_from] = corresponding d_to  (-1 if none)
-            // to_to_from[d_to]   = corresponding d_from (-1 if none)
+            bool forward;
             std::array<int, 3> from_to_to = {0, 1, 2};
             std::array<int, 3> to_to_from = {0, 1, 2};
         };
         std::vector<ShiftEdge> shift_edges;
 
-        // Helper: for a leaf operand that was NOT unioned, add a shift edge.
         auto add_shift_edge_if_needed = [&](int out_name, int nd, ASTNode* leaf, Region* region) {
             int src_name = leaf->result_name;
             if (src_name == out_name)
@@ -616,7 +655,6 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
             shift_edges.push_back({class_src, class_out, rstart, rstep, weight, true});
         };
 
-        // Recursive leaf visitor for shift edge collection.
         auto visit_leaves_for_edges = [&](auto&& self, ASTNode* node, int out_name, int nd,
                                           Region* carried_region) -> void {
             if (node == nullptr || node->is_scalar || node->is_broadcast)
@@ -639,7 +677,6 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
             }
         };
 
-        // Collect SET_REGION leaf visitor.
         auto visit_set_region_leaves = [&](auto&& self, ASTNode* node, int target_name, int nd,
                                            const std::array<int, 3>& region_start) -> void {
             if (node == nullptr || node->is_scalar || node->is_broadcast)
@@ -661,8 +698,6 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                 for (int d = 0; d < nd; ++d)
                     weight *= static_cast<int64_t>(src_it->second.global_shape[d]);
 
-                // SET_REGION T[R] = S: element i of S maps to position i+start
-                // in T. For zero communication we need o_S = o_T + start.
                 shift_edges.push_back(
                     {class_tgt, class_src, region_start, {1, 1, 1}, weight, true});
                 return;
@@ -671,7 +706,7 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                 self(self, child, target_name, nd, region_start);
         };
 
-        dag_group_for_each_node_topo(dag, [&](DAGNode* dag_node) {
+        detail::for_each_node_topo(dag, [&](DAGNode* dag_node) {
             for (ASTNode* ast_node : dag_node->ast->roots) {
                 Opcode op = static_cast<Opcode>(ast_node->opcode);
 
@@ -685,14 +720,11 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                     int nd = target_it->second.ndims;
                     auto region_start = extract_region_start(ast_node->region, nd);
 
-                    // Same-dim shift edges.
                     for (int op_idx = 1; op_idx < (int)ast_node->operands.size(); ++op_idx)
                         visit_set_region_leaves(visit_set_region_leaves,
                                                 ast_node->operands[op_idx], target_name, nd,
                                                 region_start);
 
-                    // Cross-dim shift edges: connect arrays with different ndims that
-                    // participate in this SET_REGION (e.g. 3D ↔ 2D slice).
                     for (int op_idx = 1; op_idx < (int)ast_node->operands.size(); ++op_idx) {
                         ASTNode* src_op = ast_node->operands[op_idx];
                         if (!is_ast_leaf(src_op))
@@ -705,17 +737,12 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                             continue;
                         int nd_src = src_it_cd->second.ndims;
                         if (nd_src == nd)
-                            continue; // same-dim already handled above
+                            continue;
 
-                        // from = target class (T), to = source class (S).
-                        // shift[d_from] = region_start[d_from] (region on T in T's coords).
                         std::array<int, 3> from_to_to_cd = {-1, -1, -1};
                         std::array<int, 3> to_to_from_cd = {-1, -1, -1};
 
                         if (nd < nd_src) {
-                            // Case A: lower-dim target T, higher-dim source S
-                            // (e.g. B_2d = A_view_3d[k,:,:])
-                            // Map non-singleton S dims → T dims sequentially.
                             int td = 0;
                             for (int sd = 0; sd < nd_src && td < nd; ++sd) {
                                 if (src_it_cd->second.global_shape[sd] > 1) {
@@ -725,11 +752,8 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                                 }
                             }
                             if (td != nd)
-                                continue; // mapping count mismatch
+                                continue;
                         } else {
-                            // Case B: higher-dim target T, lower-dim source S
-                            // (e.g. A_3d[k,:,:] = B_2d)
-                            // Map non-singleton region dims of T → S dims sequentially.
                             auto region_stop = extract_region_stop(
                                 ast_node->region, nd, target_it->second.global_shape);
                             int sd = 0;
@@ -742,7 +766,7 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                                 }
                             }
                             if (sd != nd_src)
-                                continue; // mapping count mismatch
+                                continue;
                         }
 
                         int class_tgt_cd = uf_find(target_name);
@@ -750,7 +774,6 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                         if (class_tgt_cd == class_src_cd)
                             continue;
 
-                        // Weight = volume of the smaller (lower-dim) array.
                         int64_t weight_cd = 1;
                         int nd_lo = std::min(nd, nd_src);
                         auto& lo_meta = (nd <= nd_src) ? target_it->second : src_it_cd->second;
@@ -787,25 +810,13 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
             }
         });
 
-        // ---------------------------------------------------------------
-        // Phase 4: Tree DP on the shift graph.
-        //
-        // Build an undirected adjacency list, find connected components
-        // (detect cycles), root each tree at a fixed-offset class, and
-        // run bottom-up / top-down DP to find globally optimal offsets.
-        // Dimensions are independent so the DP runs per-dimension.
-        // ---------------------------------------------------------------
-
         struct AdjEdge {
             int neighbor;
             std::array<int, 3> shift;
             std::array<int, 3> stride;
-            // neighbor_dim[d] = the dimension of `neighbor` that corresponds to my
-            // dimension d (-1 if no corresponding dimension).  Identity {0,1,2} for
-            // same-dim edges; remapped for cross-dim edges.
             std::array<int, 3> neighbor_dim = {0, 1, 2};
             int64_t weight;
-            bool forward; // original edge direction: from_class -> to_class
+            bool forward;
             int from_class;
             int to_class;
         };
@@ -814,17 +825,14 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
         for (auto& e : shift_edges) {
             if (e.from_class == e.to_class)
                 continue;
-            // Forward entry: "my dim d" → neighbor_dim = e.from_to_to[d]
             adj[e.from_class].push_back(
                 {e.to_class, e.shift, e.stride, e.from_to_to, e.weight, true, e.from_class,
                  e.to_class});
-            // Backward entry: "my dim d" → neighbor_dim = e.to_to_from[d]
             adj[e.to_class].push_back(
                 {e.from_class, e.shift, e.stride, e.to_to_from, e.weight, false, e.from_class,
                  e.to_class});
         }
 
-        // Find connected components via BFS, build spanning tree, detect cycles.
         std::unordered_map<int, int> comp_id;
         std::unordered_map<int, int> tree_parent;
         std::unordered_map<int, std::vector<int>> tree_children;
@@ -851,9 +859,6 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
             while (!bfs.empty()) {
                 int v = bfs.front();
                 bfs.pop();
-                // Deduplicate neighbors so that multi-edges between the
-                // same pair of classes (common for stencils) are not
-                // misdetected as back edges / cycles.
                 std::unordered_set<int> seen_neighbors;
                 for (auto& e : adj[v]) {
                     if (seen_neighbors.count(e.neighbor))
@@ -868,14 +873,12 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                         cyclic_components.insert(cid);
                     }
                 }
-                // Prefer fixed-offset class as root.
                 auto ci = class_info.find(v);
                 if (ci != class_info.end() && ci->second.has_fixed_offset)
                     comp_root[cid] = v;
             }
         }
 
-        // Re-root each tree at the chosen root if it differs from the BFS root.
         tree_parent.clear();
         tree_children.clear();
 
@@ -901,49 +904,21 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
             }
         }
 
-        // Sparse candidate-based DP.
-        //
-        // Instead of evaluating dp[v] at all offsets 0..tile-1 (which is
-        // expensive for large tiles), we only evaluate at "candidate"
-        // offsets — the breakpoints of the piecewise-linear cost function.
-        //
-        // The optimal offset at any node is always at a candidate because
-        // the cost function is a sum of weighted circular distances (each
-        // piecewise-linear), and the minimum of a piecewise-linear function
-        // occurs at a breakpoint.
-        //
-        // Candidates come from two sources:
-        //   1. Bottom-up: reverse-mapping child candidates through edges
-        //      (breakpoints of the subtree cost function)
-        //   2. Top-down: forward-mapping parent candidates through edges
-        //      (offsets the parent might query during recovery)
-        //
-        // Complexity: O(V * K^2 * D * ndims) where K = max candidate set
-        // size (typically single digits), D = max tree degree.
-
         constexpr int64_t INF = std::numeric_limits<int64_t>::max() / 2;
 
-        // Per-class, per-dimension candidate sets.
         std::unordered_map<int, std::array<std::vector<int>, 3>> cands;
 
-        // Helper: insert a candidate into a sorted, unique vector.
         auto add_cand = [](std::vector<int>& v, int o) {
             auto it = std::lower_bound(v.begin(), v.end(), o);
             if (it == v.end() || *it != o)
                 v.insert(it, o);
         };
 
-        // Helper: compute desired target offset from source offset through
-        // an edge in its original direction.
-        //   desired = (o_from + shift) / stride  mod  tile_to
         auto compute_desired = [&](int o_from, int shift_d, int stride_d, int tile_to) -> int {
             int step = stride_d > 1 ? stride_d : 1;
             return positive_mod((o_from + shift_d) / step, tile_to);
         };
 
-        // Helper: given a desired target offset, compute all source offsets
-        // in [0, tile_from) that map to it (the reverse of compute_desired).
-        // Returns up to stride candidates (plus period repetitions).
         auto reverse_desired = [&](int o_target, int shift_d, int stride_d, int tile_from,
                                    int tile_to) -> std::vector<int> {
             int step = stride_d > 1 ? stride_d : 1;
@@ -968,32 +943,26 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
             return result;
         };
 
-        // Compute post-order traversal for each tree.
         std::vector<int> post_order;
-        {
-            for (auto& [cid, root] : comp_root) {
-                if (cyclic_components.count(cid))
-                    continue;
+        for (auto& [cid, root] : comp_root) {
+            if (cyclic_components.count(cid))
+                continue;
 
-                std::stack<std::pair<int, bool>> stk;
-                stk.push({root, false});
-                while (!stk.empty()) {
-                    auto [v, processed] = stk.top();
-                    stk.pop();
-                    if (processed) {
-                        post_order.push_back(v);
-                        continue;
-                    }
-                    stk.push({v, true});
-                    for (int c : tree_children[v])
-                        stk.push({c, false});
+            std::stack<std::pair<int, bool>> stk;
+            stk.push({root, false});
+            while (!stk.empty()) {
+                auto [v, processed] = stk.top();
+                stk.pop();
+                if (processed) {
+                    post_order.push_back(v);
+                    continue;
                 }
+                stk.push({v, true});
+                for (int c : tree_children[v])
+                    stk.push({c, false});
             }
         }
 
-        // --- Pass 1: Bottom-up candidate collection ---
-        // For each node, candidates = {fixed offset} ∪ {reverse-desired
-        // of each child candidate through each edge}.
         for (int v : post_order) {
             auto ci = class_info.find(v);
             if (ci == class_info.end())
@@ -1005,7 +974,6 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
 
             auto& cands_v = cands[v];
 
-            // Seed with fixed offset if constrained.
             if (ci->second.has_fixed_offset) {
                 for (int d = 0; d < nd; ++d)
                     add_cand(cands_v[d], positive_mod(ci->second.fixed_offset[d], tile_v));
@@ -1023,28 +991,16 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                     if (e.neighbor != c)
                         continue;
                     for (int d = 0; d < nd; ++d) {
-                        // d_c: dimension of child c that corresponds to parent's dim d.
-                        // For same-dim edges neighbor_dim[d]==d; for cross-dim it may
-                        // differ or be -1 (no correspondence → skip this edge/dim).
                         int d_c = e.neighbor_dim[d];
                         if (d_c < 0)
                             continue;
-                        // d_from: the from-class dimension used to index shift/stride.
-                        // Forward edge (v→c): v is "from", so d_from = d.
-                        // Backward edge (c→v): c is "from", so d_from = d_c.
                         int d_from = e.forward ? d : d_c;
                         for (int oc : cands[c][d_c]) {
-                            // Reverse-map: given child candidate oc, find
-                            // parent offsets ov that yield zero transition cost.
                             if (e.forward) {
-                                // Original edge v→c: desired_c = (ov+s)/σ mod tile_c
-                                // Reverse: find ov given oc.
                                 for (int rv : reverse_desired(oc, e.shift[d_from],
                                                               e.stride[d_from], tile_v, tile_c))
                                     add_cand(cands_v[d], rv);
                             } else {
-                                // Original edge c→v: desired_v = (oc+s)/σ mod tile_v
-                                // This directly gives us the ideal ov.
                                 add_cand(cands_v[d], compute_desired(oc, e.shift[d_from],
                                                                      e.stride[d_from], tile_v));
                             }
@@ -1053,17 +1009,12 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                 }
             }
 
-            // If no candidates emerged (unconstrained isolated node), add 0.
             for (int d = 0; d < nd; ++d) {
                 if (cands_v[d].empty())
                     add_cand(cands_v[d], 0);
             }
         }
 
-        // --- Pass 2: Top-down candidate augmentation ---
-        // Forward-map parent candidates through edges to children so that
-        // the DP values are available at offsets the parent will query
-        // during top-down recovery.
         {
             std::queue<int> work;
             for (auto& [cid, root] : comp_root) {
@@ -1099,16 +1050,11 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                                 continue;
                             int d_from = e.forward ? d : d_c;
                             for (int ov : cands[v][d]) {
-                                // Forward-map: given parent candidate ov,
-                                // compute the desired child offset.
                                 if (e.forward) {
-                                    // Original edge v→c: desired_c = (ov+s)/σ mod tile_c
                                     add_cand(cands[c][d_c],
                                              compute_desired(ov, e.shift[d_from],
                                                              e.stride[d_from], tile_c));
                                 } else {
-                                    // Original edge c→v: desired_v = (oc+s)/σ mod tile_v
-                                    // Reverse: find oc given ov.
                                     for (int rc : reverse_desired(ov, e.shift[d_from],
                                                                   e.stride[d_from], tile_c, tile_v))
                                         add_cand(cands[c][d_c], rc);
@@ -1121,9 +1067,6 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
             }
         }
 
-        // --- Pass 3: Bottom-up DP over sparse candidates ---
-        // dp[v][d] is a vector parallel to cands[v][d], storing the minimum
-        // subtree cost when v is assigned that candidate offset in dim d.
         std::unordered_map<int, std::array<std::vector<int64_t>, 3>> dp;
 
         for (int v : post_order) {
@@ -1138,7 +1081,6 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
             auto& dp_v = dp[v];
             auto& cands_v = cands[v];
 
-            // Initialize: 0 for all candidates, or INF for non-fixed.
             for (int d = 0; d < 3; ++d) {
                 int nc = (int)cands_v[d].size();
                 dp_v[d].assign(nc, 0);
@@ -1157,7 +1099,6 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                 if (tile_c <= 0)
                     tile_c = 1;
 
-                // Collect all adjacency edges between v and c.
                 std::vector<const AdjEdge*> edges_vc;
                 for (auto& e : adj[v])
                     if (e.neighbor == c)
@@ -1167,27 +1108,19 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                 auto& dp_c = dp[c];
 
                 for (int d = 0; d < nd; ++d) {
-                    // d_c: child dimension corresponding to parent dimension d.
-                    // All edges between (v,c) must agree on this mapping; use the
-                    // first active edge to determine it.
-                    int d_c = d; // default: same-dim
+                    int d_c = d;
                     for (auto* ep : edges_vc) {
                         if (ep->neighbor_dim[d] != d) {
                             d_c = ep->neighbor_dim[d];
                             break;
                         }
                     }
-                    // If d_c == -1, no edge constrains this dimension pair.
-                    // The child's subtree cost for its own unconstrained dim is not
-                    // charged here; it is accounted for via the edge that does map.
                     if (d_c < 0)
                         continue;
 
                     int nc_v = (int)cands_v[d].size();
                     int nc_cd = (int)cands_c[d_c].size();
 
-                    // h[i] = min over child candidates j of
-                    //         [transition(cands_v[d][i], cands_c[d_c][j]) + dp_c[d_c][j]]
                     std::vector<int64_t> h(nc_v, INF);
                     for (int iv = 0; iv < nc_v; ++iv) {
                         int ov = cands_v[d][iv];
@@ -1199,8 +1132,7 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                             for (auto* ep : edges_vc) {
                                 int ep_dc = ep->neighbor_dim[d];
                                 if (ep_dc < 0)
-                                    continue; // edge doesn't constrain this dim pair
-                                // d_from: dimension of the "from" class used to index shift/stride.
+                                    continue;
                                 int d_from = ep->forward ? d : ep_dc;
                                 int o_from, tile_to, o_to;
                                 if (ep->forward) {
@@ -1233,10 +1165,8 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
             }
         }
 
-        // --- Pass 4: Top-down recovery of optimal offsets ---
-        std::unordered_map<int, std::array<int, 3>> class_offset;
+        std::unordered_map<int, std::array<int, 3>> class_phase;
 
-        // Assign roots.
         for (auto& [cid, root] : comp_root) {
             if (cyclic_components.count(cid))
                 continue;
@@ -1257,10 +1187,9 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                     }
                 }
             }
-            class_offset[root] = best;
+            class_phase[root] = best;
         }
 
-        // BFS top-down to recover children's offsets.
         {
             std::queue<int> work;
             for (auto& [cid, root] : comp_root) {
@@ -1297,19 +1226,14 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                     int nd_c = ci_c->second.ndims;
 
                     std::array<int, 3> best_c = {0, 0, 0};
-                    // For each dimension of the child, recover its best offset.
-                    // We iterate over the child's own dimensions (nd_c), not the
-                    // parent's (nd), so that cross-dim children assign all their dims.
                     for (int d_c = 0; d_c < nd_c; ++d_c) {
-                        // Find the parent dimension that maps to this child dimension,
-                        // and the corresponding parent offset.
                         int ov = -1;
                         int d_parent = -1;
                         for (int dp_d = 0; dp_d < nd; ++dp_d) {
                             for (auto* ep : edges_vc) {
                                 if (ep->neighbor_dim[dp_d] == d_c) {
                                     d_parent = dp_d;
-                                    ov = class_offset[v][dp_d];
+                                    ov = class_phase[v][dp_d];
                                     break;
                                 }
                             }
@@ -1318,8 +1242,6 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                         }
 
                         if (ov < 0) {
-                            // No parent dimension maps to this child dimension.
-                            // Pick the candidate with minimum dp cost.
                             int64_t best_cost = INF;
                             for (int ic = 0; ic < (int)cands_c[d_c].size(); ++ic) {
                                 if (dp_c[d_c][ic] < best_cost) {
@@ -1340,7 +1262,7 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                             for (auto* ep : edges_vc) {
                                 int ep_dc = ep->neighbor_dim[d_parent];
                                 if (ep_dc < 0 || ep_dc != d_c)
-                                    continue; // edge doesn't constrain this dim pair
+                                    continue;
                                 int d_from = ep->forward ? d_parent : d_c;
                                 int o_from, tile_to, o_to;
                                 if (ep->forward) {
@@ -1365,37 +1287,221 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                             }
                         }
                     }
-                    class_offset[c] = best_c;
+                    class_phase[c] = best_c;
                     work.push(c);
                 }
             }
         }
 
-        // ---------------------------------------------------------------
-        // Phase 5: Assign offsets to all arrays from their class
-        // representatives. For cyclic components, fall back to the
-        // per-array weighted-median heuristic.
-        // ---------------------------------------------------------------
+        auto positive_mod64 = [](int64_t value, int mod) -> int {
+            if (mod <= 0)
+                return static_cast<int>(value);
+            int64_t r = value % mod;
+            if (r < 0)
+                r += mod;
+            return static_cast<int>(r);
+        };
 
-        // Assign offsets from the tree DP.
+        auto abs_dist64 = [](int64_t a, int64_t b) -> int64_t {
+            return (a >= b) ? (a - b) : (b - a);
+        };
+
+        auto nearest_congruent = [&](int64_t anchor, int phase, int tile) -> int {
+            if (tile <= 0)
+                return static_cast<int>(anchor);
+
+            int target = positive_mod(phase, tile);
+            int64_t lower = target;
+            if (anchor >= target) {
+                lower += ((anchor - target) / tile) * static_cast<int64_t>(tile);
+            } else {
+                lower -= ((target - anchor + tile - 1) / tile) * static_cast<int64_t>(tile);
+            }
+            int64_t upper = lower + tile;
+            return (abs_dist64(upper, anchor) < abs_dist64(lower, anchor))
+                       ? static_cast<int>(upper)
+                       : static_cast<int>(lower);
+        };
+
+        auto reverse_absolute = [&](int64_t target_abs, int shift_d, int stride_d, int phase_from,
+                                    int tile_from) -> int {
+            int step = stride_d > 1 ? stride_d : 1;
+            int64_t low = target_abs * step - shift_d;
+            int64_t center2 = 2 * low + (step - 1);
+            bool found = false;
+            int64_t best = low;
+            int64_t best_score = 0;
+            int phase = positive_mod(phase_from, tile_from);
+
+            for (int delta = 0; delta < step; ++delta) {
+                int64_t cand = low + delta;
+                if (positive_mod64(cand, tile_from) != phase)
+                    continue;
+                if ((cand + shift_d) / step != target_abs)
+                    continue;
+                int64_t score = abs_dist64(2 * cand, center2);
+                if (!found || score < best_score || (score == best_score && cand < best)) {
+                    found = true;
+                    best = cand;
+                    best_score = score;
+                }
+            }
+
+            if (found)
+                return static_cast<int>(best);
+
+            return nearest_congruent(low, phase_from, tile_from);
+        };
+
+        struct AbsoluteProposal {
+            int value = 0;
+            int64_t weight = 0;
+        };
+
+        auto choose_absolute = [&](const std::vector<AbsoluteProposal>& proposals, int phase,
+                                   int tile) -> int {
+            std::vector<int> candidates;
+            candidates.push_back(nearest_congruent(phase, phase, tile));
+            for (auto const& p : proposals) {
+                auto it = std::lower_bound(candidates.begin(), candidates.end(), p.value);
+                if (it == candidates.end() || *it != p.value)
+                    candidates.insert(it, p.value);
+            }
+
+            int best = candidates.front();
+            int64_t best_cost = std::numeric_limits<int64_t>::max();
+            for (int cand : candidates) {
+                int64_t cost = 0;
+                for (auto const& p : proposals)
+                    cost += p.weight * abs_dist64(cand, p.value);
+                if (cost < best_cost || (cost == best_cost && cand < best)) {
+                    best_cost = cost;
+                    best = cand;
+                }
+            }
+            return best;
+        };
+
+        std::unordered_map<int, std::array<int, 3>> class_abs_offset;
+
+        for (auto& [cid, root] : comp_root) {
+            if (cyclic_components.count(cid))
+                continue;
+
+            auto ci = class_info.find(root);
+            auto phase_it = class_phase.find(root);
+            if (ci == class_info.end() || phase_it == class_phase.end())
+                continue;
+
+            std::array<int, 3> root_abs = {0, 0, 0};
+            int tile_root = ci->second.tile;
+            if (tile_root <= 0)
+                tile_root = 1;
+
+            for (int d = 0; d < ci->second.ndims; ++d) {
+                if (ci->second.has_fixed_offset)
+                    root_abs[d] = ci->second.fixed_offset[d];
+                else
+                    root_abs[d] =
+                        nearest_congruent(phase_it->second[d], phase_it->second[d], tile_root);
+            }
+            class_abs_offset[root] = root_abs;
+        }
+
+        {
+            std::queue<int> work;
+            for (auto& [cid, root] : comp_root) {
+                if (!cyclic_components.count(cid) && class_abs_offset.count(root))
+                    work.push(root);
+            }
+
+            while (!work.empty()) {
+                int v = work.front();
+                work.pop();
+
+                auto ci_v = class_info.find(v);
+                auto abs_v_it = class_abs_offset.find(v);
+                if (ci_v == class_info.end() || abs_v_it == class_abs_offset.end())
+                    continue;
+                int nd_v = ci_v->second.ndims;
+
+                for (int c : tree_children[v]) {
+                    auto ci_c = class_info.find(c);
+                    auto phase_c_it = class_phase.find(c);
+                    if (ci_c == class_info.end() || phase_c_it == class_phase.end())
+                        continue;
+
+                    int tile_c = ci_c->second.tile;
+                    if (tile_c <= 0)
+                        tile_c = 1;
+
+                    std::vector<const AdjEdge*> edges_vc;
+                    for (auto& e : adj[v])
+                        if (e.neighbor == c)
+                            edges_vc.push_back(&e);
+
+                    std::array<int, 3> abs_c = {0, 0, 0};
+                    for (int d_c = 0; d_c < ci_c->second.ndims; ++d_c) {
+                        if (ci_c->second.has_fixed_offset) {
+                            abs_c[d_c] = ci_c->second.fixed_offset[d_c];
+                            continue;
+                        }
+
+                        std::vector<AbsoluteProposal> proposals;
+                        for (auto* ep : edges_vc) {
+                            for (int d_parent = 0; d_parent < nd_v; ++d_parent) {
+                                if (ep->neighbor_dim[d_parent] != d_c)
+                                    continue;
+
+                                int value = 0;
+                                if (ep->forward) {
+                                    int d_from = d_parent;
+                                    int step = ep->stride[d_from] > 1 ? ep->stride[d_from] : 1;
+                                    int64_t anchor =
+                                        (static_cast<int64_t>(abs_v_it->second[d_parent]) +
+                                         ep->shift[d_from]) /
+                                        step;
+                                    value =
+                                        nearest_congruent(anchor, phase_c_it->second[d_c], tile_c);
+                                } else {
+                                    int d_from = d_c;
+                                    value = reverse_absolute(abs_v_it->second[d_parent],
+                                                             ep->shift[d_from],
+                                                             ep->stride[d_from],
+                                                             phase_c_it->second[d_c], tile_c);
+                                }
+                                proposals.push_back({value, ep->weight});
+                            }
+                        }
+
+                        abs_c[d_c] =
+                            choose_absolute(proposals, phase_c_it->second[d_c], tile_c);
+                    }
+
+                    class_abs_offset[c] = abs_c;
+                    work.push(c);
+                }
+            }
+        }
+
         for (auto& [name, meta] : array_meta) {
             if (meta.decomp_final)
                 continue;
             if (matmul_arrays.count(name))
                 continue;
             int rep = uf_find(name);
-            auto it = class_offset.find(rep);
-            if (it != class_offset.end())
+            auto comp_it = comp_id.find(rep);
+            if (comp_it != comp_id.end() && cyclic_components.count(comp_it->second))
+                continue;
+            auto it = class_abs_offset.find(rep);
+            if (it != class_abs_offset.end())
                 meta.offset = it->second;
         }
 
-        // Fallback: for arrays in cyclic components, collect desired offsets
-        // per array and pick the per-dimension weighted median.
         if (!cyclic_components.empty()) {
-            DBG_PRINT("Warning: Fallback to per-array weighted median for cyclic components\n");
-
             struct DesiredOffset {
-                std::array<int, 3> desired;
+                std::array<int, 3> desired_phase;
+                std::array<int, 3> desired_anchor;
                 int64_t weight;
             };
             std::unordered_map<int, std::vector<DesiredOffset>> all_desired;
@@ -1413,13 +1519,16 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                         return;
                     if (out_tile <= 0)
                         return;
-                    std::array<int, 3> desired = {0, 0, 0};
-                    for (int d = 0; d < nd; ++d)
-                        desired[d] = positive_mod(src_it->second.offset[d], out_tile);
+                    std::array<int, 3> desired_phase = {0, 0, 0};
+                    std::array<int, 3> desired_anchor = {0, 0, 0};
+                    for (int d = 0; d < nd; ++d) {
+                        desired_anchor[d] = src_it->second.offset[d];
+                        desired_phase[d] = positive_mod(src_it->second.offset[d], out_tile);
+                    }
                     int64_t weight = 1;
                     for (int d = 0; d < nd; ++d)
                         weight *= static_cast<int64_t>(src_it->second.global_shape[d]);
-                    all_desired[out_name].push_back({desired, weight});
+                    all_desired[out_name].push_back({desired_phase, desired_anchor, weight});
                     return;
                 }
                 for (int i = 0; i < (int)node->operands.size(); ++i) {
@@ -1438,18 +1547,21 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                             continue;
                         auto rstart = extract_region_start(child_region, nd);
                         auto rstep = extract_region_step(child_region, nd);
-                        std::array<int, 3> desired = {0, 0, 0};
+                        std::array<int, 3> desired_phase = {0, 0, 0};
+                        std::array<int, 3> desired_anchor = {0, 0, 0};
                         for (int d = 0; d < nd; ++d) {
                             int step = (rstep[d] > 1) ? rstep[d] : 1;
                             int raw = src_it->second.offset[d] + rstart[d];
-                            desired[d] =
-                                (step > 1) ? positive_mod(raw / step, out_tile)
-                                           : positive_mod(raw, out_tile);
+                            desired_anchor[d] = (step > 1) ? (raw / step) : raw;
+                            desired_phase[d] = (step > 1)
+                                                   ? positive_mod(raw / step, out_tile)
+                                                   : positive_mod(raw, out_tile);
                         }
                         int64_t weight = 1;
                         for (int d = 0; d < nd; ++d)
                             weight *= static_cast<int64_t>(src_it->second.global_shape[d]);
-                        all_desired[out_name].push_back({desired, weight});
+                        all_desired[out_name].push_back(
+                            {desired_phase, desired_anchor, weight});
                     } else {
                         self(self, child, out_name, nd, out_tile);
                     }
@@ -1472,27 +1584,30 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                     int tile = src_it->second.tile;
                     if (tile <= 0)
                         return;
-                    std::array<int, 3> desired = {0, 0, 0};
-                    for (int d = 0; d < nd; ++d)
-                        desired[d] = positive_mod(target_meta.offset[d] + region_start[d], tile);
+                    std::array<int, 3> desired_phase = {0, 0, 0};
+                    std::array<int, 3> desired_anchor = {0, 0, 0};
+                    for (int d = 0; d < nd; ++d) {
+                        desired_anchor[d] = target_meta.offset[d] + region_start[d];
+                        desired_phase[d] =
+                            positive_mod(target_meta.offset[d] + region_start[d], tile);
+                    }
                     int64_t weight = 1;
                     for (int d = 0; d < nd; ++d)
                         weight *= static_cast<int64_t>(src_it->second.global_shape[d]);
-                    all_desired[src_name].push_back({desired, weight});
+                    all_desired[src_name].push_back({desired_phase, desired_anchor, weight});
                     return;
                 }
                 for (ASTNode* child : node->operands)
                     self(self, child, target_name, nd, target_meta, region_start);
             };
 
-            // Only collect for arrays in cyclic components.
             auto is_cyclic_array = [&](int name) {
                 int rep = uf_find(name);
                 auto cit = comp_id.find(rep);
                 return cit != comp_id.end() && cyclic_components.count(cit->second);
             };
 
-            dag_group_for_each_node_topo(dag, [&](DAGNode* dag_node) {
+            detail::for_each_node_topo(dag, [&](DAGNode* dag_node) {
                 for (ASTNode* ast_node : dag_node->ast->roots) {
                     Opcode op = static_cast<Opcode>(ast_node->opcode);
 
@@ -1548,14 +1663,12 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                 if (tile <= 0)
                     continue;
 
-                std::array<int, 3> best_offset = {0, 0, 0};
+                std::array<int, 3> best_phase = {0, 0, 0};
                 for (int d = 0; d < nd; ++d) {
-                    // Collect unique candidate offsets from desired points.
-                    // The weighted circular median is always at a desired point.
                     std::vector<int> fb_cands;
                     fb_cands.push_back(0);
                     for (auto& c : constraints) {
-                        int o = positive_mod(c.desired[d], tile);
+                        int o = positive_mod(c.desired_phase[d], tile);
                         auto it2 = std::lower_bound(fb_cands.begin(), fb_cands.end(), o);
                         if (it2 == fb_cands.end() || *it2 != o)
                             fb_cands.insert(it2, o);
@@ -1566,13 +1679,24 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
                     for (int o : fb_cands) {
                         int64_t cost = 0;
                         for (auto& c : constraints)
-                            cost += c.weight * circ_dist(o, c.desired[d], tile);
+                            cost += c.weight * circ_dist(o, c.desired_phase[d], tile);
                         if (cost < best_cost) {
                             best_cost = cost;
                             best_o = o;
                         }
                     }
-                    best_offset[d] = best_o;
+                    best_phase[d] = best_o;
+                }
+
+                std::array<int, 3> best_offset = {0, 0, 0};
+                for (int d = 0; d < nd; ++d) {
+                    std::vector<AbsoluteProposal> proposals;
+                    for (auto& c : constraints) {
+                        proposals.push_back(
+                            {nearest_congruent(c.desired_anchor[d], best_phase[d], tile),
+                             c.weight});
+                    }
+                    best_offset[d] = choose_absolute(proposals, best_phase[d], tile);
                 }
                 meta_it->second.offset = best_offset;
             }
@@ -1585,18 +1709,8 @@ void ArrayDAGGroup::compute_decompositions(DAG* dag) {
         }
     }
 
-    // Mark all arrays as finalized so subsequent epochs do not reset their
-    // offsets. This is critical for correctness: chares from earlier epochs
-    // may still be executing and looking up decompositions from array_meta.
     for (auto& [name, meta] : array_meta)
         meta.decomp_final = true;
-
-    DBG_PRINT("[PE %d] compute_decompositions: assigned tiles and offsets for %d arrays\n",
-              CkMyPe(), (int)array_meta.size());
-    for (auto& [name, meta] : array_meta) {
-        DBG_PRINT("  array %d: ndims=%d shape=(%d,%d,%d) tile=%d offset=(%d,%d,%d)\n", name,
-                  meta.ndims, meta.global_shape[0], meta.global_shape[1],
-                  meta.global_shape[2], meta.tile, meta.offset[0], meta.offset[1],
-                  meta.offset[2]);
-    }
 }
+
+} // namespace decomposition_solver

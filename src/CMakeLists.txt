@@ -131,7 +131,6 @@ target_compile_options(jit_obj PRIVATE -O3 -g ${SIMPLE_ARRAY_DEFS})
 set(BACKEND_GROUP_SOURCES
     dag_group_runtime.cpp
     dag_group_receive.cpp
-    dag_group_decomp.cpp
     dag_group_compile.cpp
 )
 
