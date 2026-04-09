@@ -55,8 +55,7 @@ Distributed N-dimensional array DSL built on charmtyles. Supports up to 3D array
 | Symbol | Line | Description |
 |--------|------|-------------|
 | `CT_MIN_TILE_1D/2D/3D` | 11-17 | Minimum tile sizes |
-| `CT_MAX_OFFSET` | 20 | Maximum decomposition offset |
-| `PartitionTraits<N>` | 24 | Maps N → Charm++ proxy/index types (specializations for 1,2,3) |
+| `PartitionTraits<N>` | 22 | Maps N → Charm++ proxy/index types (specializations for 1,2,3) |
 | `proxy_at<N>()` | 44 | Access chare array element by index |
 | `CTArrayBase<N>` | 93 | Type-erased N-D array base — name, region, decomp, global_shape, dtype |
 | `Array<N,T>` | 113 | Typed array — Kokkos views (d_view, h_view), `data_ptr()`, `copyToHost/Device()` |

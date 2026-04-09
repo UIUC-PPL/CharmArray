@@ -17,7 +17,6 @@
 #define CT_MIN_TILE_3D 64
 #endif
 
-#define CT_MAX_OFFSET 16
 
 // ---- Partition traits: map N -> concrete Charm++ chare/proxy/index types ----
 
