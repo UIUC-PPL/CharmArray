@@ -3,7 +3,7 @@ from charmtyles.core import execute, set_auto_flush
 
 interface = cnp.CharmNumericInterface()
 interface.connect('192.168.1.115', 1234, 4)
-set_auto_flush(interface, 100)
+set_auto_flush(interface, 1000)
 
 u = cnp.zeros((2048, 2048), dtype=cnp.float32)
 
