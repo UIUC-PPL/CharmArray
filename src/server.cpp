@@ -1,4 +1,3 @@
-#include <charmtyles/charmtyles.hpp>
 #include "server.hpp"
 #include "converse.h"
 #include "conv-ccs.h"
@@ -50,7 +49,7 @@ void connection_handler(char *msg)
 
 void disconnection_handler(char *msg)
 {
-  CkExit();
+  ct::sync();
   char *cmd = msg + CmiMsgHeaderSizeBytes;
   int epoch = extract<int>(cmd);
   uint32_t size = extract<uint32_t>(cmd);
@@ -79,10 +78,31 @@ Main::Main(CkArgMsg *msg)
   server = Server();
   Server::initialize();
   register_handlers();
-  ct::init();
+  int argc = msg->argc;
+  char** argv = msg->argv;
+  std::size_t vec_len = 1ULL << 26;
+  std::size_t row_len = 1ULL << 13;
+  std::size_t col_len = 1ULL << 13;
+
+  for (int i = 1; i < argc; ++i) {
+    // -v 1024
+    if (strcmp(argv[i], "-v") == 0 && i + 1 < argc) {
+      vec_len = static_cast<std::size_t>(strtoull(argv[++i], nullptr, 0));
+    }
+    // -r 512 
+    else if (strcmp(argv[i], "-r") == 0 && i + 1 < argc) {
+      row_len = static_cast<std::size_t>(strtoull(argv[++i], nullptr, 0));
+    } 
+    // -c 512
+    else if (strcmp(argv[i], "-c") == 0 && i + 1 < argc) {
+      col_len = static_cast<std::size_t>(strtoull(argv[++i], nullptr, 0));
+    }
+  }
+  ct::init(vec_len, row_len, col_len);
 #ifndef NDEBUG
   CkPrintf("Initialization done\n");
 #endif
+
 }
 
 void Main::register_handlers()
@@ -106,7 +126,6 @@ void Main::handle_command(int epoch, uint8_t kind, uint32_t size, char *cmd)
     while (!command_buffer.empty() && std::get<0>(command_buffer.top()) == EPOCH)
     {
       buffer_t buffer = command_buffer.top();
-      // CkPrintf("Executing buffered at epoch %i, current %i\n", std::get<0>(buffer), EPOCH);
       execute_command(std::get<0>(buffer), std::get<1>(buffer), (int)size, std::get<2>(buffer));
       free(std::get<2>(buffer));
       command_buffer.pop();
@@ -131,23 +150,20 @@ void Main::send_reply(int epoch, int size, char *msg)
   server.reply_buffer.erase(epoch);
 }
 
-void Main::execute_operation(int epoch, int size, char *cmd)
-{
-  // first delete arrays
+void Main::execute_operation(int epoch, int size, char *cmd) {
   uint32_t num_deletions = extract<uint32_t>(cmd);
-  // CkPrintf("Num deletions = %u\n", num_deletions);
-  CkPrintf("Memory usage before delete is %f MB\n", CmiMemoryUsage() / (1024. * 1024.));
   for (int i = 0; i < num_deletions; i++)
-  {
-    ct_name_t name = extract<ct_name_t>(cmd);
-    Server::remove(name);
-  }
-  CkPrintf("Memory usage after %u deletions is %f MB\n", num_deletions, CmiMemoryUsage() / (1024. * 1024.));
-
-  astnode *head = decode(cmd);
-  std::vector<uint64_t> metadata;
-  calculate(head, metadata);
-  delete_ast(head);
+    remove(extract<ct_name_t>(cmd));
+  uint32_t num_deferred_deletions = extract<uint32_t>(cmd);
+  std::vector<ct_name_t> deferred_deletions; deferred_deletions.reserve(num_deferred_deletions);
+  for (int i = 0; i < num_deferred_deletions; i++)
+    deferred_deletions.emplace_back(extract<ct_name_t>(cmd));
+  char* dimPos  = cmd + sizeof(uint8_t);
+  if (peek<uint8_t>(cmd) == 1) process_scalar(cmd);
+  else if (peek<uint8_t>(dimPos) == 1) process_tensor<ct::vector, ct::vec_impl::vec_node>(cmd);
+  else if (peek<uint8_t>(dimPos) == 2) process_tensor<ct::matrix, ct::mat_impl::mat_node>(cmd);
+  for(const auto& it : deferred_deletions)
+    remove(it);
 }
 
 void Main::execute_command(int epoch, uint8_t kind, int size, char *cmd)
@@ -203,8 +219,7 @@ void Main::execute_creation(int epoch, int size, char *cmd)
   {
   case 0:
   {
-    // create scalar
-    CmiAbort("Not implemented");
+    CmiAbort("Scalars can only be made through reduction ops and matmuls");
   }
   case 1:
   {
@@ -214,18 +229,18 @@ void Main::execute_creation(int epoch, int size, char *cmd)
     if (has_buf)
     {
       double *init_buf = (double *)cmd;
-      res = ct::from_vector(init_buf, size);
+      res = ct::from_vector_unique(init_buf, size);
     }
     else if (has_init)
     {
       double init_value = extract<double>(cmd);
-      res = ct::vector(size, init_value);
+      res = std::make_unique<ct::vector>(size, init_value);
     }
     else
     {
-      res = ct::vector(size);
+      res = std::make_unique<ct::vector>(size);
     }
-    Server::insert(res_name, std::move(res));
+    insert(res_name, std::move(res));
     break;
   }
   case 2:
@@ -237,23 +252,22 @@ void Main::execute_creation(int epoch, int size, char *cmd)
     if (has_buf)
     {
       double *init_buf = (double *)cmd;
-      res = ct::from_matrix(init_buf, size1, size2);
+      res = ct::from_matrix_unique(init_buf, size1, size2);
     }
     else if (has_init)
     {
       double init_value = extract<double>(cmd);
-      res = ct::matrix(size1, size2, init_value);
+      res = std::make_unique<ct::matrix>(size1, size2, init_value);
     }
     else
     {
-      res = ct::matrix(size1, size2);
+      res = std::make_unique<ct::matrix>(size1, size2);
     }
-    Server::insert(res_name, std::move(res));
+    insert(res_name, std::move(res));
     break;
   }
   default:
   {
-    // FIXME is this correctly caught?
     CmiAbort("Greater than 2 dimensions not supported");
   }
   }
@@ -262,50 +276,48 @@ void Main::execute_creation(int epoch, int size, char *cmd)
 void Main::execute_fetch(int epoch, int size, char *cmd)
 {
   ct_name_t name = extract<ct_name_t>(cmd);
-  ct_array_t &arr = Server::lookup(name);
+  ct_array_t &arr = lookup(name);
   char *reply = nullptr;
   int reply_size = 0;
   std::visit(
-      [&](auto &x)
+    [&](auto &x)
+    {
+      using T = std::decay_t<decltype(x)>;
+      if constexpr (std::is_same_v<T, double>)
       {
-        using T = std::decay_t<decltype(x)>;
-        if constexpr (std::is_same_v<T, ct::scalar>)
-        {
-          double value = x.get();
-          reply = (char *)&value;
-          reply_size += 8;
-          send_reply(epoch, reply_size, reply);
-          // CcsSendReply(reply_size, reply);
-        }
-        else if constexpr (std::is_same_v<T, ct::vector>)
-        {
-          std::vector<double> values = x.get();
-          reply = (char *)values.data();
-          reply_size += values.size() * sizeof(double);
-          send_reply(epoch, reply_size, reply);
-        }
-        else if constexpr (std::is_same_v<T, ct::matrix>)
-        {
-          std::vector<std::vector<double>> values = x.get();
-          std::vector<double> flat;
-          for (const auto &row : values)
-            flat.insert(flat.end(), row.begin(), row.end());
-          reply = reinterpret_cast<char *>(flat.data());
-          reply_size += flat.size() * sizeof(double);
-          send_reply(epoch, reply_size, reply);
-        }
-      },
-      arr);
+        reply = (char *)&x;
+        reply_size += 8;
+        send_reply(epoch, reply_size, reply);
+      }
+      else if constexpr (std::is_same_v<T, std::unique_ptr<ct::vector>>)
+      {
+        std::vector<double> values = x->get();
+        reply = (char *)values.data();
+        reply_size += values.size() * sizeof(double);
+        send_reply(epoch, reply_size, reply);
+      }
+      else if constexpr (std::is_same_v<T, std::unique_ptr<ct::matrix>>)
+      {
+        std::vector<std::vector<double>> values = x->get();
+        std::vector<double> flat;
+        for (const auto &row : values)
+          flat.insert(flat.end(), row.begin(), row.end());
+        reply = reinterpret_cast<char *>(flat.data());
+        reply_size += flat.size() * sizeof(double);
+        send_reply(epoch, reply_size, reply);
+      }
+    },
+    arr);
 }
 
 void Main::execute_delete(int epoch, int size, char *cmd)
 {
   uint32_t num_deletions = extract<uint32_t>(cmd);
   for (int i = 0; i < num_deletions; i++)
-  {
-    ct_name_t name = extract<ct_name_t>(cmd);
-    Server::remove(name);
-  }
+    remove(extract<ct_name_t>(cmd));
+  uint32_t num_deferred_deletions = extract<uint32_t>(cmd);
+  for (int i = 0; i < num_deferred_deletions; i++)
+    remove(extract<ct_name_t>(cmd));
 }
 
 void Main::execute_disconnect(int epoch, int size, char *cmd)
@@ -315,10 +327,12 @@ void Main::execute_disconnect(int epoch, int size, char *cmd)
 #ifndef NDEBUG
   CkPrintf("Disconnected %" PRIu8 " from server\n", client_id);
 #endif
+  CkExit();
 }
 
 void Main::execute_sync(int epoch, int size, char *cmd)
 {
+  ct::sync();
   CkPrintf("Execution time = %f\n", CkTimer() - start_time);
   bool r = true;
   send_reply(epoch, 1, (char *)&r);

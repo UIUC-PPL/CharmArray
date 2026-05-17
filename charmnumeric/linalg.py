@@ -7,16 +7,8 @@ from charmnumeric.array import create_ndarray
 from charmnumeric.ast import ASTNode
 
 
-def axpy(a, x, y, multiplier=None):
-    operands = [a, x, y]
-    if multiplier is not None:
-        operands.append(multiplier)
-        operation = 'axpy_multiplier'
-    else:
-        operation = 'axpy'
+def axpy(a, x, y):
     res = get_name()
-    cmd_buffer = ASTNode(res, OPCODES.get(operation), operands)
-    return create_ndarray(x.ndim, x.dtype,
+    cmd_buffer = ASTNode(res, OPCODES.get('axpy'), [x, y], args=[a])
+    return create_ndarray(x.ndim, x.dtype, x.shape,
                           name=res, command_buffer=cmd_buffer)
-
-

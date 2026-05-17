@@ -1,7 +1,7 @@
 import struct
 import atexit
 from pyccs import Server
-from charmnumeric import array
+import gc
 
 debug = False
 server = None
@@ -9,10 +9,55 @@ client_id = 0
 next_name = 0
 epoch = 0
 
-OPCODES = {'+': 1, '-': 2, '*': 3 ,'/': 4, '@': 5, 'copy': 6, 'axpy': 7,
-           'axpy_multiplier': 8, 'setitem': 9, 'pow': 10, '>': 11, 
-           '<': 12, '>=': 13, '<=': 14, '==': 15, '!=': 16, '&': 17, 
-           '|': 18, '!':19, 'where':20, 'log': 21, 'exp': 22, 'abs': 23, 'any':24, 'all':25}
+OPCODES = {
+    # base_op
+    '+': 1,
+    '-': 2,
+    '*': 3,
+    '/': 4,
+    '@': 5,
+    'copy': 6,
+    '>': 9,
+    '<': 10,
+    '>=': 11,
+    '<=': 12,
+    '==': 13,
+    '!=': 14,
+    '&': 15,
+    '|': 16,
+    '!': 17,
+    'where': 18,
+    
+    # custom_unary_op
+    'exp': 41,
+    'log': 42,
+    'abs': 43,
+    'negate': 44,
+    'square': 45,
+    'sqrt': 46,
+    'reciprocal': 47,
+    'sin': 48,
+    'cos': 49,
+    'relu': 50,
+    'scale': 51,
+    'add_constant': 52,
+    
+    # custom_binary_op
+    'add': 71,
+    'subtract': 72,
+    'multiply': 73,
+    'divide': 74,
+    'power': 75,
+    'modulo': 76,
+    'max': 77,
+    'min': 78,
+    'greater_than': 79,
+    'less_than': 80,
+    'equal': 81,
+    'atan2': 82,
+    'weighted_average': 83,
+    'axpy': 84
+}
 
 INV_OPCODES = {v: k for k, v in OPCODES.items()}
 
@@ -69,14 +114,25 @@ def connect(server_ip, server_port):
         atexit.register(disconnect)
 
 def disconnect():
-    from charmnumeric.array import deletion_buffer, deletion_buffer_size
-    global client_id, deletion_buffer, deletion_buffer_size
-    if deletion_buffer_size > 0:
-        cmd = to_bytes(len(deletion_buffer), 'I') + deletion_buffer
+    # cleanup the remaining ndarrays
+    from charmnumeric.array import ndarray
+    deleted_id = []
+    for obj in gc.get_objects():
+        if isinstance(obj, ndarray):
+            if not obj.name in deleted_id:
+                print(obj.name)
+                deleted_id.append(obj.name)
+                obj.__del__()
+    from charmnumeric.array import deletion_buffer, deletion_buffer_size, deferred_deletion_buffer_size, deferred_deletion_buffer
+    if (deletion_buffer_size > 0) or (deferred_deletion_buffer_size > 0):
+        cmd = to_bytes(deletion_buffer_size, 'I') + deletion_buffer + to_bytes(deferred_deletion_buffer_size, 'I') + deferred_deletion_buffer
         cmd = to_bytes(get_epoch(), 'i') + to_bytes(len(cmd), 'I') + cmd
         send_command_async(Handlers.delete_handler, cmd)
         deletion_buffer = b''
-        deletion_buffer_size = b''
+        deletion_buffer_size = 0
+        deferred_deletion_buffer = b''
+        deferred_deletion_buffer_size = 0
+    global client_id
     cmd = to_bytes(client_id, 'B')
     cmd = to_bytes(get_epoch(), 'i') + to_bytes(len(cmd), 'I') + cmd
     send_command_async(Handlers.disconnection_handler, cmd)
@@ -95,7 +151,6 @@ def get_creation_command(arr, name, shape, buf=None):
         cmd += buf
     elif arr.init_value is not None:
         cmd += to_bytes(arr.init_value, 'd')
-    print(cmd)
     cmd = to_bytes(get_epoch(), 'i') + to_bytes(len(cmd), 'I') + cmd
     return cmd
 

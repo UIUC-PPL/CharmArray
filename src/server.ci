@@ -1,11 +1,36 @@
 mainmodule server
 {
     extern module libcharmtyles;
-    PUPable pow_t;
-    PUPable log_t;
-    PUPable exp_t;
-    PUPable abs_t;
-    
+    // Register all basic unary operators
+    PUPable ct::negate_op;
+    PUPable ct::abs_op;
+    PUPable ct::square_op;
+    PUPable ct::sqrt_op;
+    PUPable ct::reciprocal_op;
+    PUPable ct::sin_op;
+    PUPable ct::cos_op;
+    PUPable ct::log_op;
+    PUPable ct::exp_op;
+    PUPable ct::scale_op;
+    PUPable ct::add_constant_op;
+    PUPable ct::relu_op;
+
+    // Register all basic binary operators
+    PUPable ct::add_op;
+    PUPable ct::subtract_op;
+    PUPable ct::multiply_op;
+    PUPable ct::divide_op;
+    PUPable ct::power_op;
+    PUPable ct::modulo_op;
+    PUPable ct::max_op;
+    PUPable ct::min_op;
+    PUPable ct::greater_than_op;
+    PUPable ct::less_than_op;
+    PUPable ct::equal_op;
+    PUPable ct::atan2_op;
+    PUPable ct::weighted_average_op;
+    PUPable ct::axpy_op;
+
     mainchare Main
     {
         entry Main(CkArgMsg*);

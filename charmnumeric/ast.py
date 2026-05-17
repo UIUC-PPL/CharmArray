@@ -7,7 +7,7 @@ from charmnumeric.ccs import OPCODES, INV_OPCODES, to_bytes
 
 
 max_depth = 10
-
+multiLineFuse = False
 
 def set_max_depth(d):
     global max_depth
@@ -18,55 +18,96 @@ def get_max_depth():
     global max_depth
     return max_depth
 
+def charm_fuse(func):
+    def compile_wrapper(*args, **kwargs):
+        global multiLineFuse
+        orig_max_depth = get_max_depth()
+        multiLineFuse = True
+        set_max_depth(float('inf'))
+        out = func(*args, **kwargs)
+        multiLineFuse = False
+        set_max_depth(orig_max_depth)
+        return out
+    return compile_wrapper
 
 class ASTNode(object):
-    def __init__(self, name, opcode, operands, arg=0.0):
-        from charmtiles.array import ndarray
+    def __init__(self, name, opcode, operands, args=[]):
+        from charmnumeric.array import ndarray
+        global multiLineFuse
         # contains opcode, operands
         # operands are ndarrays
         self.name = name
         self.opcode = opcode
         self.operands = operands
         self.depth = 0
-        self.arg = arg
+        self.args = args
+        self.multiLineFuse = multiLineFuse
         if self.opcode != 0:
             for op in self.operands:
                 if isinstance(op, ndarray):
                     self.depth = max(self.depth, 1 + op.command_buffer.depth)
 
-    def get_command(self, validated_arrays, save=True):
+    #################################################################################################################################################################
+    # Marker determines whether we are dealing with a tensor, a scalar or an arithmetic type                                                                        #
+    # Marker = 0 : arithmetic type                                                                                                                                  #
+    # Marker = 1 : scalar     type                                                                                                                                  #
+    # Marker = 2 : tensor     type                                                                                                                                  #
+    # Encoding = | Marker | dim | shape | opcode | save_op | ID | multiLineFuse  | NumArgs | Args | NumOperands | OperandEncodingSize | RecursiveOperandEncoding |  #
+    #            |   8    |  8  |  64   |   32   |   1     | 64 |       1        |   32    |  64  |     8       |         32          | ........................ |  #
+    # NB: If opcode is 0, the encoding is limited to ID                                                                                                             #
+    # Encoding = | Marker | shape |  val  |                                                                                                                         #
+    #            |   8    |  64   |  64   |                                                                                                                         #
+    # NB: Latter encoding for double constants                                                                                                                      #
+    #################################################################################################################################################################
+    def get_command(self, ndim, shape, save=True, is_scalar=False, hasExceededMaxAstDepth=False):
         from charmnumeric.array import ndarray
+
+        # Ndims and Shape setup
+        if is_scalar:
+            cmd = to_bytes(1, 'B')
+        else:
+            cmd = to_bytes(2, 'B')
+        cmd += to_bytes(ndim, 'B')
+        for _shape in shape:
+            cmd += to_bytes(_shape, 'L')
+
         if self.opcode == 0:
-            cmd = to_bytes(self.opcode, 'L')
-            cmd += to_bytes(False, '?')
-            cmd += to_bytes(self.operands[0].name, 'L')
+            cmd += to_bytes(0, 'I') + to_bytes(False, '?') + to_bytes(self.operands[0].name, 'L')
             return cmd
-        cmd = to_bytes(self.opcode, 'L') + to_bytes(self.name, 'L')
-        cmd += to_bytes(save, '?') + to_bytes(len(self.operands), 'B')
+
+        cmd += to_bytes(self.opcode, 'I') + to_bytes(save, '?') + to_bytes(self.name, 'L') + to_bytes(self.multiLineFuse, '?')
+        cmd += to_bytes(len(self.args), 'I')
+        for arg in self.args:
+            cmd += to_bytes(arg, 'd')
+
+        cmd += to_bytes(len(self.operands), 'B')
         for op in self.operands:
-            # an operand can also be a double
             if isinstance(op, ndarray):
-                if op.name in validated_arrays:
-                    opcmd = to_bytes(0, 'L')
-                    opcmd += to_bytes(False, '?')
-                    opcmd += to_bytes(op.name, 'L')
-                    cmd += to_bytes(len(opcmd), 'I')
-                    cmd += opcmd
+                if op.valid:
+                    if op.is_scalar:
+                        opcmd = to_bytes(1, 'B')
+                    else:
+                        opcmd = to_bytes(2, 'B')
+                    opcmd += to_bytes(op.ndim, 'B')
+                    for _shape in op.shape:
+                        opcmd += to_bytes(_shape, 'L')
+                    opcmd += to_bytes(0, 'I') + to_bytes(False, '?') + to_bytes(op.name, 'L')
                 else:
-                    save_op = True if c_long.from_address(id(op)).value - 2 > 0 else False
-                    opcmd = op.command_buffer.get_command(validated_arrays,
-                                                          save=save_op)
-                    if not op.valid and save_op:
-                        validated_arrays[op.name] = op
-                    cmd += to_bytes(len(opcmd), 'I')
-                    cmd += opcmd
+                    ### this will only be true when AST is being flushed because of exceeding max depth and ensures that unnecessary temporaries are not saved
+                    if hasExceededMaxAstDepth:
+                        save_op = True if c_long.from_address(id(op)).value - 4 > 0 else False
+                    else:
+                        save_op = True if c_long.from_address(id(op)).value - 2 > 0 else False
+                    opcmd = op.command_buffer.get_command(op.ndim, op.shape, save=save_op, is_scalar=op.is_scalar)
+                    if save_op or (op.command_buffer.opcode == OPCODES.get('@')) or (op.command_buffer.opcode == OPCODES.get('copy')):
+                        op.validate()
             elif isinstance(op, float) or isinstance(op, int):
-                opcmd = to_bytes(0, 'L')
-                opcmd += to_bytes(True, '?')
-                opcmd += to_bytes(op, 'd')
-                cmd += to_bytes(len(opcmd), 'I')
-                cmd += opcmd
-        cmd += to_bytes(self.arg, 'd')
+                opcmd = to_bytes(0, 'B')
+                for _shape in shape:
+                    opcmd += to_bytes(_shape, 'L')
+                opcmd += to_bytes(float(op), 'd')
+            cmd += to_bytes(len(opcmd), 'I')
+            cmd += opcmd
         return cmd
 
     def plot_graph(self, validated_arrays={}, G=None, node_map={},
